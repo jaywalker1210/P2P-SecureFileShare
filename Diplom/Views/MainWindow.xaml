@@ -1,0 +1,214 @@
+﻿<Window x:Class="Diplom.Views.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:converters="clr-namespace:Diplom.Converters" 
+        mc:Ignorable="d"
+        Title="MainWindow" Height="700" Width="1000" 
+        WindowStartupLocation="CenterScreen">
+        
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+    <!-- Верхняя панель: Статус и управление -->
+    <Border Grid.Row="0" Background="#2b579a" Padding="10">
+        <StackPanel>
+            <TextBlock Text="P2P Безопасный обмен файлами"
+                           Foreground="White" FontSize="20" FontWeight="Bold"/>
+            <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                <!-- Статус сервера -->
+                <Border Background="{Binding ServerStatusColor, Converter={StaticResource ColorToBrushConverter}}"
+                            CornerRadius="3" Padding="10,5" Margin="0,10,0,0">
+                    <TextBlock Text="{Binding ServerStatusText}" Foreground="White" FontWeight="Bold"/>
+                </Border>
+
+                <!-- Ваше имя -->
+                <TextBlock Text="Ваше имя:" Foreground="White" VerticalAlignment="Center" Margin="20,0,5,0"/>
+                <TextBox Text="{Binding MyName, UpdateSourceTrigger=PropertyChanged}" Width="150" VerticalAlignment="Center"/>
+
+                <!-- IP адрес -->
+                <TextBlock Text="Ваш IP:" Foreground="White" VerticalAlignment="Center" Margin="20,0,5,0"/>
+                <TextBlock Text="{Binding MyIP}" Foreground="Yellow" VerticalAlignment="Center" FontWeight="Bold"/>
+            </StackPanel>
+
+            <!-- Сообщения статуса -->
+            <Border Background="#1e3a5f" CornerRadius="3" Padding="10,5" Margin="0,5,0,0">
+                <TextBlock Text="{Binding StatusMessage}" Foreground="White" TextWrapping="Wrap"/>
+            </Border>
+        </StackPanel>
+    </Border>
+
+    <!-- Основной содержимое -->
+    <Grid Grid.Row="1">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="350"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- Левая панель: Список пользователей -->
+        <GroupBox Grid.Column="0" Margin="10" Header="Пользователи в сети">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <!-- Кнопка обновления -->
+                <Button Grid.Row="0" Content="🔄 Обновить список" Command="{Binding RefreshPeersCommand}" Margin="5" Padding="10,5"/>
+
+                <!-- Список пользователей -->
+                <ListView Grid.Row="1" ItemsSource="{Binding Peers}" SelectedValuePath="IPAddress" SelectedValue="{Binding SelectedPeerIP}">
+                    <ListView.ItemTemplate>
+                        <DataTemplate>
+                            <Border BorderBrush="#ddd" BorderThickness="0,0,0,1" Padding="5">
+                                <StackPanel>
+                                    <TextBlock Text="{Binding DisplayName}" FontWeight="Bold" FontSize="14"/>
+                                    <TextBlock Text="{Binding StatusDisplay}" Foreground="Gray" Margin="0,2,0,0"/>
+                                    <TextBlock Text="{Binding LastSeen, StringFormat='Последняя активность: {0:HH:mm}'}" FontSize="10" Foreground="#999"/>
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+            </Grid>
+        </GroupBox>
+
+        <!-- Правая панель: История передач -->
+        <GroupBox Grid.Column="1" Margin="10" Header="История передач файлов">
+            <DataGrid ItemsSource="{Binding Transfers}" AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False" IsReadOnly="True" SelectionMode="Single">
+                <DataGrid.Columns>
+                    <DataGridTemplateColumn Header="" Width="30">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock TextAlignment="Center" FontSize="16">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Text" Value="⏳"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Status}" Value="Completed">
+                                                    <Setter Property="Text" Value="✅"/>
+                                                    <Setter Property="Foreground" Value="Green"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Status}" Value="Failed">
+                                                    <Setter Property="Text" Value="❌"/>
+                                                    <Setter Property="Foreground" Value="Red"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Status}" Value="InProgress">
+                                                    <Setter Property="Text" Value="🔄"/>
+                                                    <Setter Property="Foreground" Value="Blue"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+
+                    <DataGridTextColumn Header="Время" Binding="{Binding Timestamp, StringFormat=HH:mm:ss}" Width="80"/>
+                    <DataGridTextColumn Header="Файл" Binding="{Binding FileName}" Width="200">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+
+                    <DataGridTextColumn Header="Отправитель" Binding="{Binding Sender}" Width="120"/>
+                    <DataGridTextColumn Header="Получатель" Binding="{Binding Receiver}" Width="120"/>
+                    <DataGridTextColumn Header="Размер">
+                        <DataGridTextColumn.Binding>
+                            <Binding Path="FileSize">
+                                <Binding.StringFormat>
+                                    {0:NO} байт
+                                </Binding.StringFormat>
+                            </Binding>
+                        </DataGridTextColumn.Binding>
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="HorizontalAlignment" Value="Right"/>
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+                    <DataGridTemplateColumn Header="Прогресс" Width="100">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <ProgressBar Value="{Binding Progress}" Height="20" Maximum="100" Background="#eee">
+                                    <ProgressBar.Foreground>
+                                        <SolidColorBrush>
+                                            <SolidColorBrush.Color>
+                                                <Binding Path="Status">
+                                                    <Binding.Converter>
+                                                        <converters:StatusToColorConverter/>
+                                                    </Binding.Converter>
+                                                </Binding>
+                                            </SolidColorBrush.Color>
+                                        </SolidColorBrush>
+                                    </ProgressBar.Foreground>
+                                </ProgressBar>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                </DataGrid.Columns>
+            </DataGrid>
+        </GroupBox>
+    </Grid>
+
+    <!-- Нижняя панель: Кнопки управления -->
+    <Border Grid.Row="2" Background="#f5f5f5" Padding="10">
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+            <!-- Кнопка запуска сервера -->
+            <Button Content="▶ Запустить сервер" Command="{Binding StartServerCommand}" Margin="5" Padding="20,10" Background="#4CAF50" Foreground="White" FontWeight="Bold" FontSize="14">
+                <Button.Style>
+                    <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                        <Setter Property="IsEnabled" Value="True"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsServerRunning}" Value="True">
+                                <Setter Property="IsEnabled" Value="False"/>
+                                <Setter Property="Background" Value="#ccc"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Button.Style>
+            </Button>
+
+            <!-- Кнопка остановки сервера -->
+            <Button Content="⏹ Остановить сервер" Command="{Binding StopServerCommand}" Margin="5" Padding="20,10" Background="#f44336" Foreground="White" FontWeight="Bold" FontSize="14">
+                <Button.Style>
+                    <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                        <Setter Property="IsEnabled" Value="False"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsServerRunning}" Value="True">
+                                <Setter Property="IsEnabled" Value="True"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Button.Style>
+            </Button>
+
+            <!-- Кнопка отправки файла -->
+            <Button Content="📤 Отправить файл" Command="{Binding SendFileCommand}" Margin="5" Padding="20,10" Background="#2196f3" Foreground="White" FontWeight="Bold" FontSize="14" ToolTip="Выберите файл для отправки выбранному пользователю">
+                <Button.Style>
+                    <Style TargetType="Button">
+                        <Setter Property="IsEnabled" Value="False"/>
+                        <Style.Triggers>
+                            <MultiDataTrigger>
+                                <MultiDataTrigger.Conditions>
+                                    <Condition Binding="{Binding IsServerRunning}" Value="True"/>
+                                    <Condition Binding="{Binding SelectedPeerIP, Converter={StaticResource StringNotEmptyConverter}}" Value="True"/>
+                                </MultiDataTrigger.Conditions>
+                                <Setter Property="IsEnabled" Value="True"/>
+                            </MultiDataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Button.Style>
+            </Button>
+        </StackPanel>
+    </Border>
+    </Grid>
+</Window>

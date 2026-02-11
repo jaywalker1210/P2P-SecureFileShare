@@ -1,0 +1,1 @@
+﻿В ViewModels/MainViewModel.cs логика UI, связь между View и Model
