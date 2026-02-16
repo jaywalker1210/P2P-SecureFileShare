@@ -110,7 +110,7 @@ namespace Diplom.ViewModels
             {
                 Peers.Add(new Peer
                 {
-                    Name = "Компьютер Б (получатель)",
+                    Name = "Компьютер А",
                     IPAddress = "192.168.1.61",
                     IsOnline = true,
                     LastSeen = DateTime.Now
@@ -218,17 +218,19 @@ namespace Diplom.ViewModels
                     Progress = 0
                 };
 
-                // Добавляем в UI потоке
                 System.Windows.Application.Current.Dispatcher.Invoke(() =>
                 {
                     Transfers.Add(transfer);
                 });
 
-                var receiverPeer = Peers.FirstOrDefault(p => p.IPAddress == SelectedPeerIP);
-                if (receiverPeer != null)
+                var progress = new Progress<double>(p =>
                 {
-                    receiverPeer.Type = PeerType.Client; // Тот, кому отправляем
-                }
+                    System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        transfer.Progress = p;
+                        OnPropertyChanged(nameof(Transfers));
+                    });
+                });
 
                 // Отправляем файл в фоновом потоке
                 Task.Run(async () =>
@@ -238,17 +240,26 @@ namespace Diplom.ViewModels
                         await _networkService.SendFileAsync(
                             openFileDialog.FileName,
                             SelectedPeerIP,
-                            MyName);
+                            MyName,
+                            progress);
 
-                        transfer.Status = FileTransfer.TransferStatus.Completed;
-                        transfer.Progress = 100;
+                        // Обновляем статус в UI потоке
+                        System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                        {
+                            transfer.Status = FileTransfer.TransferStatus.Completed;
+                            transfer.Progress = 100;
+                            OnPropertyChanged(nameof(Transfers));
 
-                        StatusMessage = $"Файл '{fileName}' отправителя";
+                            StatusMessage = $"Файл '{fileName}' отправлен на {SelectedPeerIP}";
+                        });
                     }
                     catch (Exception ex)
                     {
-                        transfer.Status = FileTransfer.TransferStatus.Failed;
-                        StatusMessage = $"Ошибка отправки: {ex.Message}";
+                        System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                        {
+                            transfer.Status = FileTransfer.TransferStatus.Failed;
+                            StatusMessage = $"Ошибка отправки: {ex.Message}";
+                        });
                     }
                 });
             }
@@ -278,6 +289,8 @@ namespace Diplom.ViewModels
 
         private void OnFileReceived(string filePath, System.Net.Sockets.TcpClient client)
         {
+            // Получение IP без порта
+            var remoteEndPoint = client.Client.RemoteEndPoint.ToString();
             var senderIP = client.Client.RemoteEndPoint.ToString();
             var fileName = System.IO.Path.GetFileName(filePath);
 
@@ -294,6 +307,7 @@ namespace Diplom.ViewModels
                         IPAddress = senderIP,
                         IsOnline = true,
                         Type = PeerType.Server, // Отправил файл, значит у него работает сервер
+                        LastSeen = DateTime.Now
                     };
                     Peers.Add(sender);
                 }

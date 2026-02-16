@@ -7,5 +7,6 @@
         <converters:ColorToBrushConverter x:Key="ColorToBrushConverter"/>
         <converters:StringNotEmptyConverter x:Key="StringNotEmptyConverter"/>
         <converters:StatusToColorConverter x:Key="StatusToColorConverter"/>
+        <converters:FileSizeConverter x:Key="FileSizeConverter"/>
     </Application.Resources>
 </Application>

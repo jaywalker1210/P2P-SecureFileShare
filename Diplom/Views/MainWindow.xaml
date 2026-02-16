@@ -123,15 +123,12 @@
                     <DataGridTextColumn Header="Получатель" Binding="{Binding Receiver}" Width="120"/>
                     <DataGridTextColumn Header="Размер">
                         <DataGridTextColumn.Binding>
-                            <Binding Path="FileSize">
-                                <Binding.StringFormat>
-                                    {0:NO} байт
-                                </Binding.StringFormat>
-                            </Binding>
+                            <Binding Path="FileSize" Converter="{StaticResource FileSizeConverter}"/>
                         </DataGridTextColumn.Binding>
                         <DataGridTextColumn.ElementStyle>
                             <Style TargetType="TextBlock">
                                 <Setter Property="HorizontalAlignment" Value="Right"/>
+                                <Setter Property="Margin" Value="5,0"/>
                             </Style>
                         </DataGridTextColumn.ElementStyle>
                     </DataGridTextColumn>

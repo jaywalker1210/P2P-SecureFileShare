@@ -115,7 +115,7 @@ namespace Diplom.Services
             FileReceived?.Invoke(filePath, client);
         }
 
-        public async Task SendFileAsync(string filePath, string receiverIP, string senderName)
+        public async Task SendFileAsync(string filePath, string receiverIP, string senderName, IProgress<double> progress = null)
         {
             try
             {
@@ -138,10 +138,18 @@ namespace Diplom.Services
                         // Отправляем содержимое файла
                         byte[] buffer = new byte[8192];
                         int bytesRead;
+                        long totalBytesSent = 0;
 
-                        while((bytesRead=await fileStream.ReadAsync(buffer, 0, buffer.Length)) > 0)
+                        while((bytesRead = await fileStream.ReadAsync(buffer, 0, buffer.Length)) > 0)
                         {
                             writer.Write(buffer, 0, bytesRead);
+                            totalBytesSent += bytesRead;
+
+                            if (progress != null)
+                            {
+                                double percent = (double)totalBytesSent / fileStream.Length * 100;
+                                progress.Report(percent);
+                            }
                         }
                     }
 
