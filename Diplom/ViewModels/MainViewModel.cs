@@ -76,6 +76,8 @@ namespace Diplom.ViewModels
             _networkService = new NetworkService();
             _networkService.LogMessage += OnLogMessage;
             _networkService.FileReceived += OnFileReceived;
+            _networkService.FileReceiveStarted += OnFileReceiveStarted;
+            _networkService.FileReceiveProgress += OnFileReceiveProgress;
             _networkService.ServerStarted += () => IsServerRunning = true;
             _networkService.ServerStopped += () => IsServerRunning = false;
 
@@ -111,7 +113,7 @@ namespace Diplom.ViewModels
                 Peers.Add(new Peer
                 {
                     Name = "Компьютер А",
-                    IPAddress = "192.168.1.61",
+                    IPAddress = "192.168.1.67",
                     IsOnline = true,
                     LastSeen = DateTime.Now
                 });
@@ -221,6 +223,7 @@ namespace Diplom.ViewModels
                 System.Windows.Application.Current.Dispatcher.Invoke(() =>
                 {
                     Transfers.Add(transfer);
+                    StatusMessage = $"Отправка файла: {fileName} на {SelectedPeerIP}";
                 });
 
                 var progress = new Progress<double>(p =>
@@ -287,27 +290,68 @@ namespace Diplom.ViewModels
             });
         }
 
-        private void OnFileReceived(string filePath, System.Net.Sockets.TcpClient client)
+        private void OnFileReceived(string filePath, System.Net.Sockets.TcpClient client, string senderIP)
         {
-            // Получение IP без порта
-            var remoteEndPoint = client.Client.RemoteEndPoint.ToString();
-            var senderIP = client.Client.RemoteEndPoint.ToString();
             var fileName = System.IO.Path.GetFileName(filePath);
-
-            var sender = Peers.FirstOrDefault(p => p.IPAddress == senderIP);
 
             // Добавляем историю в UI потоке
             System.Windows.Application.Current.Dispatcher.Invoke(() =>
             {
+                var transfer = Transfers.FirstOrDefault(t => t.FileName == fileName && t.Status == FileTransfer.TransferStatus.InProgress);
+
+                if (transfer != null)
+                {
+                    transfer.Status = FileTransfer.TransferStatus.Completed;
+                    transfer.Progress = 100;
+                }
+                else
+                {
+                    transfer = new FileTransfer
+                    {
+                        FileName = fileName,
+                        Sender = senderIP,
+                        Receiver = MyName,
+                        Timestamp = DateTime.Now,
+                        Status = FileTransfer.TransferStatus.Completed,
+                        Progress = 100
+                    };
+                    Transfers.Add(transfer);
+                }
+
+                OnPropertyChanged(nameof(Transfers));
+                StatusMessage = $"Файл получен: {fileName} от {senderIP}";
+            });
+        }
+
+        private void OnFileReceiveStarted(string fileName, long fileSize, string senderName, string senderIP)
+        {
+            System.Windows.Application.Current.Dispatcher.Invoke(() =>
+            {
+                var transfer = new FileTransfer
+                {
+                    FileName = fileName,
+                    FileSize = fileSize,
+                    Sender = senderIP,
+                    Receiver = MyName,
+                    Timestamp = DateTime.Now,
+                    Status = FileTransfer.TransferStatus.InProgress,
+                    Progress = 0
+                };
+
+                Transfers.Add(transfer);
+                StatusMessage = $"Получение файла: {fileName} от {senderIP}";
+
+                // Обновляем или добавляем отправителя в список пиров
+                var sender = Peers.FirstOrDefault(p => p.IPAddress == senderIP);
                 if (sender == null)
                 {
                     sender = new Peer
                     {
-                        Name = $"Пользователь {senderIP}",
+                        Name = string.IsNullOrEmpty(senderName) ? $"Пользователь {senderIP}" : senderName,
                         IPAddress = senderIP,
                         IsOnline = true,
-                        Type = PeerType.Server, // Отправил файл, значит у него работает сервер
-                        LastSeen = DateTime.Now
+                        Type = PeerType.Server,
+                        LastSeen = DateTime.Now,
                     };
                     Peers.Add(sender);
                 }
@@ -318,18 +362,19 @@ namespace Diplom.ViewModels
                     sender.LastSeen = DateTime.Now;
                 }
 
-                var transfer = new FileTransfer
-                {
-                    FileName = fileName,
-                    Sender = senderIP,
-                    Receiver = MyName,
-                    Timestamp = DateTime.Now,
-                    Status = FileTransfer.TransferStatus.Completed,
-                    Progress = 100
-                };
+            });
+        }
 
-                Transfers.Add(transfer);
-                StatusMessage = $"Файл получен: {fileName} от {senderIP}";
+        private void OnFileReceiveProgress(string fileName, double progress)
+        {
+            System.Windows.Application.Current.Dispatcher.Invoke(() =>
+            {
+                var transfer = Transfers.FirstOrDefault(t => t.FileName == fileName && t.Status == FileTransfer.TransferStatus.InProgress);
+                if (transfer != null)
+                {
+                    transfer.Progress = progress;
+                    OnPropertyChanged(nameof(Transfers));
+                }
             });
         }
 

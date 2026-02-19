@@ -82,10 +82,10 @@
         <GroupBox Grid.Column="1" Margin="10" Header="История передач файлов">
             <DataGrid ItemsSource="{Binding Transfers}" AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False" IsReadOnly="True" SelectionMode="Single">
                 <DataGrid.Columns>
-                    <DataGridTemplateColumn Header="" Width="30">
+                    <DataGridTemplateColumn Header="Статус" Width="30">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
-                                <TextBlock TextAlignment="Center" FontSize="16">
+                                <TextBlock TextAlignment="Center" FontSize="16" ToolTip="{Binding Status}">
                                     <TextBlock.Style>
                                         <Style TargetType="TextBlock">
                                             <Setter Property="Text" Value="⏳"/>
@@ -115,13 +115,14 @@
                         <DataGridTextColumn.ElementStyle>
                             <Style TargetType="TextBlock">
                                 <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+                                <Setter Property="ToolTip" Value="{Binding FileName}"/>
                             </Style>
                         </DataGridTextColumn.ElementStyle>
                     </DataGridTextColumn>
 
                     <DataGridTextColumn Header="Отправитель" Binding="{Binding Sender}" Width="120"/>
                     <DataGridTextColumn Header="Получатель" Binding="{Binding Receiver}" Width="120"/>
-                    <DataGridTextColumn Header="Размер">
+                    <DataGridTextColumn Header="Размер" Width="80">
                         <DataGridTextColumn.Binding>
                             <Binding Path="FileSize" Converter="{StaticResource FileSizeConverter}"/>
                         </DataGridTextColumn.Binding>
@@ -135,18 +136,17 @@
                     <DataGridTemplateColumn Header="Прогресс" Width="100">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
-                                <ProgressBar Value="{Binding Progress}" Height="20" Maximum="100" Background="#eee">
+                                <ProgressBar Value="{Binding Progress}" Height="16" Maximum="100" Background="#eee" Margin="2">
                                     <ProgressBar.Foreground>
                                         <SolidColorBrush>
                                             <SolidColorBrush.Color>
-                                                <Binding Path="Status">
-                                                    <Binding.Converter>
-                                                        <converters:StatusToColorConverter/>
-                                                    </Binding.Converter>
-                                                </Binding>
+                                                    <Binding Path="Status" Converter="{StaticResource StatusToColorConverter}"/>
                                             </SolidColorBrush.Color>
                                         </SolidColorBrush>
                                     </ProgressBar.Foreground>
+                                    <ProgressBar.ToolTip>
+                                            <TextBlock Text="{Binding Progress, StringFormat={}{0:F0}%}"/>
+                                    </ProgressBar.ToolTip>
                                 </ProgressBar>
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>

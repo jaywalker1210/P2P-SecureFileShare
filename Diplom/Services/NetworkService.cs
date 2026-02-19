@@ -14,10 +14,13 @@ namespace Diplom.Services
         private int _port = 8888;
 
         public event Action<string> LogMessage;
-        public event Action<string, TcpClient> FileReceived;
+        public event Action<string, TcpClient, string> FileReceived;
 
         public event Action ServerStarted;
         public event Action ServerStopped;
+
+        public event Action<string, long, string,string> FileReceiveStarted;
+        public event Action<string, double> FileReceiveProgress;
 
         public async Task StartServerAsync()
         {
@@ -59,12 +62,15 @@ namespace Diplom.Services
             {
                 try
                 {
+                    var clientEndPoint = client.Client.RemoteEndPoint.ToString();
+                    var clientIP = clientEndPoint.Split(':')[0]; // Только IP-адрес без порта
+
                     // Читаем тип сообщения (1 = файл)
                     byte messageType = reader.ReadByte();
 
                     if (messageType == 1) // Файл
                     {
-                        await ReceiveFileAsync(reader, client);
+                        await ReceiveFileAsync(reader, client, clientIP);
                     }
                 }
                 catch (Exception ex)
@@ -74,45 +80,58 @@ namespace Diplom.Services
             }
         }
 
-        private async Task ReceiveFileAsync(BinaryReader reader, TcpClient client)
+        private async Task ReceiveFileAsync(BinaryReader reader, TcpClient client, string clientIP)
         {
-            // Читаем метаданные
-            string fileName = reader.ReadString();
-            long fileSize = reader.ReadInt64();
-            string senderName = reader.ReadString();
-
-            LogMessage?.Invoke($"Получение файла '{fileName}' ({fileSize} байт) от {senderName}.");
-
-            // Создаем папку для загрузок
-            string downloadsPath = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-                "P2PDownloads");
-            Directory.CreateDirectory(downloadsPath);
-
-            string filePath = Path.Combine(downloadsPath, fileName);
-
-            // Читаем и сохраняем файл
-            using (FileStream fileStream = new FileStream(filePath, FileMode.Create))
+            try
             {
-                byte[] buffer = new byte[8192];
-                long bytesReceived = 0;
+                // Читаем метаданные
+                string fileName = reader.ReadString();
+                long fileSize = reader.ReadInt64();
+                string senderName = reader.ReadString();
 
-                while (bytesReceived < fileSize)
+                LogMessage?.Invoke($"Получение файла '{fileName}' ({fileSize} байт) от {senderName} ({clientIP}).");
+
+                // Создаем папку для загрузок
+                string downloadsPath = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                    "P2PDownloads");
+                Directory.CreateDirectory(downloadsPath);
+
+                string filePath = Path.Combine(downloadsPath, fileName);
+
+                FileReceiveStarted?.Invoke(fileName, fileSize, senderName, clientIP);
+
+                // Читаем и сохраняем файл
+                using (FileStream fileStream = new FileStream(filePath, FileMode.Create))
                 {
-                    int bytesToRead = (int)Math.Min(buffer.Length, fileSize - bytesReceived);
-                    int bytesRead = reader.Read(buffer, 0, bytesToRead);
+                    byte[] buffer = new byte[8192];
+                    long bytesReceived = 0;
 
-                    if (bytesRead == 0) break;
+                    while (bytesReceived < fileSize)
+                    {
+                        int bytesToRead = (int)Math.Min(buffer.Length, fileSize - bytesReceived);
+                        int bytesRead = reader.Read(buffer, 0, bytesToRead);
 
-                    await fileStream.WriteAsync(buffer, 0, bytesRead);
-                    bytesReceived += bytesRead;
+                        if (bytesRead == 0) break;
 
-                    // Можно отправлять прогресс на UI
+                        await fileStream.WriteAsync(buffer, 0, bytesRead);
+                        bytesReceived += bytesRead;
+
+                        // Отправляем прогресс
+                        double progress = (double)bytesReceived / fileSize * 100;
+                        FileReceiveProgress?.Invoke(fileName, progress);
+                    }
                 }
-            }
 
-            LogMessage?.Invoke($"Файл '{fileName}' успешно получен и сохранен в '{filePath}'.");
-            FileReceived?.Invoke(filePath, client);
+                LogMessage?.Invoke($"Файл '{fileName}' успешно получен и сохранен в '{filePath}'.");
+                FileReceived?.Invoke(filePath, client, clientIP);
+            }
+            catch (Exception ex)
+            {
+                LogMessage?.Invoke($"Ошибка получения файла: {ex.Message}");
+                throw;
+            }
+            
         }
 
         public async Task SendFileAsync(string filePath, string receiverIP, string senderName, IProgress<double> progress = null)
@@ -140,11 +159,12 @@ namespace Diplom.Services
                         int bytesRead;
                         long totalBytesSent = 0;
 
-                        while((bytesRead = await fileStream.ReadAsync(buffer, 0, buffer.Length)) > 0)
+                        while ((bytesRead = await fileStream.ReadAsync(buffer, 0, buffer.Length)) > 0)
                         {
                             writer.Write(buffer, 0, bytesRead);
                             totalBytesSent += bytesRead;
 
+                            // Отправляем прогресс
                             if (progress != null)
                             {
                                 double percent = (double)totalBytesSent / fileStream.Length * 100;
@@ -153,12 +173,13 @@ namespace Diplom.Services
                         }
                     }
 
-                    LogMessage?.Invoke($"Файл '{Path.GetFileName(filePath)}' успешно отправлен на {receiverIP}.");
+                    LogMessage?.Invoke($"Файл отправлен на {receiverIP}");
                 }
             }
             catch (Exception ex)
             {
-                LogMessage?.Invoke($"Ошибка отправки файла: {ex.Message}");
+                LogMessage?.Invoke($"Ошибка отправки: {ex.Message}");
+                throw;
             }
         }
     }
