@@ -1,6 +1,7 @@
 ﻿using Diplom.Models;
 using Diplom.Services;
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
@@ -20,7 +21,8 @@ namespace Diplom.ViewModels
 
         public ObservableCollection<Peer> Peers { get; }
         public ObservableCollection<FileTransfer> Transfers { get; }
-        
+
+        private Dictionary<string, FileTransfer> _activeTransfers = new Dictionary<string, FileTransfer>();
 
         public string StatusMessage
         {
@@ -226,6 +228,9 @@ namespace Diplom.ViewModels
                     StatusMessage = $"Отправка файла: {fileName} на {SelectedPeerIP}";
                 });
 
+                string transferKey = $"{fileName}_{DateTime.Now.Ticks}";
+                _activeTransfers[transferKey] = transfer;
+
                 var progress = new Progress<double>(p =>
                 {
                     System.Windows.Application.Current.Dispatcher.Invoke(() =>
@@ -264,6 +269,10 @@ namespace Diplom.ViewModels
                             StatusMessage = $"Ошибка отправки: {ex.Message}";
                         });
                     }
+                    finally
+                    {
+                        _activeTransfers.Remove(transferKey);
+                    }
                 });
             }
         }
@@ -297,7 +306,9 @@ namespace Diplom.ViewModels
             // Добавляем историю в UI потоке
             System.Windows.Application.Current.Dispatcher.Invoke(() =>
             {
-                var transfer = Transfers.FirstOrDefault(t => t.FileName == fileName && t.Status == FileTransfer.TransferStatus.InProgress);
+                var transfer = Transfers.FirstOrDefault(t => 
+                    t.FileName == fileName && 
+                    t.Status == FileTransfer.TransferStatus.InProgress);
 
                 if (transfer != null)
                 {
@@ -309,6 +320,7 @@ namespace Diplom.ViewModels
                     transfer = new FileTransfer
                     {
                         FileName = fileName,
+                        FileSize = new System.IO.FileInfo(filePath).Length,
                         Sender = senderIP,
                         Receiver = MyName,
                         Timestamp = DateTime.Now,
@@ -320,6 +332,9 @@ namespace Diplom.ViewModels
 
                 OnPropertyChanged(nameof(Transfers));
                 StatusMessage = $"Файл получен: {fileName} от {senderIP}";
+
+                string transferKey = $"{fileName}_{senderIP}";
+                _activeTransfers.Remove(transferKey);
             });
         }
 
@@ -327,41 +342,31 @@ namespace Diplom.ViewModels
         {
             System.Windows.Application.Current.Dispatcher.Invoke(() =>
             {
-                var transfer = new FileTransfer
-                {
-                    FileName = fileName,
-                    FileSize = fileSize,
-                    Sender = senderIP,
-                    Receiver = MyName,
-                    Timestamp = DateTime.Now,
-                    Status = FileTransfer.TransferStatus.InProgress,
-                    Progress = 0
-                };
+                var existingTransfer = Transfers.FirstOrDefault(t =>
+                    t.FileName == fileName &&
+                    t.Sender == senderIP &&
+                    t.Status == FileTransfer.TransferStatus.InProgress);
 
-                Transfers.Add(transfer);
-                StatusMessage = $"Получение файла: {fileName} от {senderIP}";
-
-                // Обновляем или добавляем отправителя в список пиров
-                var sender = Peers.FirstOrDefault(p => p.IPAddress == senderIP);
-                if (sender == null)
+                if (existingTransfer == null)
                 {
-                    sender = new Peer
+                    var transfer = new FileTransfer
                     {
-                        Name = string.IsNullOrEmpty(senderName) ? $"Пользователь {senderIP}" : senderName,
-                        IPAddress = senderIP,
-                        IsOnline = true,
-                        Type = PeerType.Server,
-                        LastSeen = DateTime.Now,
+                        FileName = fileName,
+                        FileSize = fileSize,
+                        Sender = senderIP,
+                        Receiver = MyName,
+                        Timestamp = DateTime.Now,
+                        Status = FileTransfer.TransferStatus.InProgress,
+                        Progress = 0
                     };
-                    Peers.Add(sender);
-                }
-                else
-                {
-                    sender.IsOnline = true;
-                    sender.Type = PeerType.Server;
-                    sender.LastSeen = DateTime.Now;
+
+                    Transfers.Add(transfer);
+
+                    string transferKey = $"{fileName}_{senderIP}";
+                    _activeTransfers[transferKey] = transfer;
                 }
 
+                StatusMessage = $"Получение файла: {fileName} от {senderIP}";
             });
         }
 
@@ -369,7 +374,10 @@ namespace Diplom.ViewModels
         {
             System.Windows.Application.Current.Dispatcher.Invoke(() =>
             {
-                var transfer = Transfers.FirstOrDefault(t => t.FileName == fileName && t.Status == FileTransfer.TransferStatus.InProgress);
+                var transfer = Transfers.FirstOrDefault(t =>
+                    t.FileName == fileName &&
+                    t.Status == FileTransfer.TransferStatus.InProgress);
+
                 if (transfer != null)
                 {
                     transfer.Progress = progress;

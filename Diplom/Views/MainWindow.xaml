@@ -82,25 +82,26 @@
         <GroupBox Grid.Column="1" Margin="10" Header="История передач файлов">
             <DataGrid ItemsSource="{Binding Transfers}" AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False" IsReadOnly="True" SelectionMode="Single">
                 <DataGrid.Columns>
-                    <DataGridTemplateColumn Header="Статус" Width="30">
+                    <DataGridTemplateColumn Header="Статус" Width="50">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
                                 <TextBlock TextAlignment="Center" FontSize="16" ToolTip="{Binding Status}">
                                     <TextBlock.Style>
                                         <Style TargetType="TextBlock">
                                             <Setter Property="Text" Value="⏳"/>
-                                            <Style.Triggers>
+                                                <Setter Property="Foreground" Value="#FFA500"/>
+                                                <Style.Triggers>
                                                 <DataTrigger Binding="{Binding Status}" Value="Completed">
                                                     <Setter Property="Text" Value="✅"/>
-                                                    <Setter Property="Foreground" Value="Green"/>
+                                                    <Setter Property="Foreground" Value="#4CAF50"/>
                                                 </DataTrigger>
                                                 <DataTrigger Binding="{Binding Status}" Value="Failed">
                                                     <Setter Property="Text" Value="❌"/>
-                                                    <Setter Property="Foreground" Value="Red"/>
+                                                    <Setter Property="Foreground" Value="#F44336"/>
                                                 </DataTrigger>
                                                 <DataTrigger Binding="{Binding Status}" Value="InProgress">
                                                     <Setter Property="Text" Value="🔄"/>
-                                                    <Setter Property="Foreground" Value="Blue"/>
+                                                    <Setter Property="Foreground" Value="#2196F3"/>
                                                 </DataTrigger>
                                             </Style.Triggers>
                                         </Style>
@@ -136,15 +137,12 @@
                     <DataGridTemplateColumn Header="Прогресс" Width="100">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
-                                <ProgressBar Value="{Binding Progress}" Height="16" Maximum="100" Background="#eee" Margin="2">
-                                    <ProgressBar.Foreground>
-                                        <SolidColorBrush>
-                                            <SolidColorBrush.Color>
-                                                    <Binding Path="Status" Converter="{StaticResource StatusToColorConverter}"/>
-                                            </SolidColorBrush.Color>
-                                        </SolidColorBrush>
-                                    </ProgressBar.Foreground>
-                                    <ProgressBar.ToolTip>
+                                    <ProgressBar Value="{Binding Progress, Mode=OneWay, UpdateSourceTrigger=PropertyChanged}" 
+                                             Height="16" Maximum="100" 
+                                             Minimum="0"
+                                             Background="#eee" Margin="2"
+                                             Foreground="#4CAF50">
+                                        <ProgressBar.ToolTip>
                                             <TextBlock Text="{Binding Progress, StringFormat={}{0:F0}%}"/>
                                     </ProgressBar.ToolTip>
                                 </ProgressBar>
