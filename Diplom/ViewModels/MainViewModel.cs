@@ -115,7 +115,7 @@ namespace Diplom.ViewModels
                 Peers.Add(new Peer
                 {
                     Name = "Компьютер А",
-                    IPAddress = "192.168.1.67",
+                    IPAddress = "192.168.1.21",
                     IsOnline = true,
                     LastSeen = DateTime.Now
                 });
