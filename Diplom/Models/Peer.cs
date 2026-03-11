@@ -33,7 +33,7 @@ namespace Diplom.Models
         {
             get
             {
-                if (!IsOnline) return "Grey";
+                if (!IsOnline) return "Gray";
                 return Status switch
                 {
                     PeerStatus.ServerReady => "Green",

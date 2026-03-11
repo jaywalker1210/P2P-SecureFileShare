@@ -83,7 +83,7 @@ namespace Diplom.ViewModels
 
             _networkService.LogMessage += OnLogMessage;
             _networkService.FileReceived += OnFileReceived;
-            //_networkService.FileReceiveStarted += OnFileReceiveStarted;
+            _networkService.FileReceiveStarted += OnFileReceiveStarted;
             _networkService.FileReceiveProgress += OnFileReceiveProgress;
             _networkService.ServerStarted += () => IsServerRunning = true;
             _networkService.ServerStopped += () => IsServerRunning = false;
@@ -302,6 +302,31 @@ namespace Diplom.ViewModels
             });
         }
 
+        private void OnFileReceiveStarted(string fileName, long fileSize, string senderName, string senderIP)
+        {
+            System.Windows.Application.Current.Dispatcher.Invoke(() =>
+            {
+                var transfer = new FileTransfer
+                {
+                    FileName = fileName,
+                    FileSize = fileSize,
+                    Sender = senderIP,
+                    Receiver = MyName,
+                    Timestamp = DateTime.Now,
+                    Status = FileTransfer.TransferStatus.InProgress,
+                    Progress = 0
+                };
+
+                Transfers.Add(transfer);
+                StatusMessage = $"Получение файла: {fileName} от {senderIP}";
+
+                string key = $"{fileName}_{senderIP}";
+                if (!_activeTransfers.ContainsKey(key))
+                {
+                    _activeTransfers.Add(key, transfer);
+                }
+            });
+        }
 
         // остановился здесь
         private void OnFileReceived(string filePath, System.Net.Sockets.TcpClient client, string senderIP)
