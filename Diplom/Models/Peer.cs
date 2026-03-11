@@ -13,18 +13,32 @@ namespace Diplom.Models
         public bool IsOnline { get; set; }
         public DateTime LastSeen { get; set; } = DateTime.Now;
 
-        public PeerType Type { get; set; } = PeerType.Unknown;
+        public PeerStatus Status { get; set; } = PeerStatus.Unknown;
 
-        public string StatusDisplay
+        public string DisplayStatus
         {
             get
             {
                 if (!IsOnline) return "● Оффлайн";
-                return Type switch
+                return Status switch
                 {
-                    PeerType.Server => "● Сервер запущен (готов принимать файлы)",
-                    PeerType.Client => "● Готов отправлять файлы",
+                    PeerStatus.ServerReady => "● Сервер готов",
+                    PeerStatus.ClientOnly => "● Только клиент",
                     _ => "● Онлайн"
+                };
+            }
+        }
+
+        public string StatusColor
+        {
+            get
+            {
+                if (!IsOnline) return "Grey";
+                return Status switch
+                {
+                    PeerStatus.ServerReady => "Green",
+                    PeerStatus.ClientOnly => "Orange",
+                    _ => "Blue"
                 };
             }
         }
@@ -32,10 +46,10 @@ namespace Diplom.Models
         public string DisplayName => $"{Name} ({IPAddress})";
     }
 
-    public enum PeerType
+    public enum PeerStatus
     {
         Unknown,
-        Server, // Запустил сервер
-        Client // Не запустил сервер
+        ServerReady, // Запустил сервер
+        ClientOnly // Тоько клиент, не готов принимать
     }
 }

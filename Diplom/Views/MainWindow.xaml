@@ -68,9 +68,16 @@
                             <Border BorderBrush="#ddd" BorderThickness="0,0,0,1" Padding="5">
                                 <StackPanel>
                                     <TextBlock Text="{Binding DisplayName}" FontWeight="Bold" FontSize="14"/>
-                                    <TextBlock Text="{Binding StatusDisplay}" Foreground="Gray" Margin="0,2,0,0"/>
-                                    <TextBlock Text="{Binding LastSeen, StringFormat='Последняя активность: {0:HH:mm}'}" FontSize="10" Foreground="#999"/>
-                                </StackPanel>
+                                        <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                                            <Ellipse Width="10" Margin="0,0,5,0">
+                                                <Ellipse.Fill>
+                                                    <SolidColorBrush Color="{Binding StatusColor, Converter={StaticResource StringToColorConverter}}"/>
+                                                </Ellipse.Fill>
+                                            </Ellipse>
+                                            <TextBlock Text="{Binding DisplayStatus}" Foreground="Gray"/>
+                                        </StackPanel>
+                                        <TextBlock Text="{Binding LastSeen,StringFormat='Последняя активность: {0:HH:mm}'}" FontSize="10" Foreground="#999"/>
+                                    </StackPanel>
                             </Border>
                         </DataTemplate>
                     </ListView.ItemTemplate>

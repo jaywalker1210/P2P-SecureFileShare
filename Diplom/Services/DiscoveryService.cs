@@ -124,5 +124,74 @@ namespace Diplom.Services
                 }
             }
         }
+
+        private void RespondToPeer(string peerIP, string myName)
+        {
+            try
+            {
+                using (var client = new UdpClient())
+                {
+                    var endpoint = new IPEndPoint(IPAddress.Parse(peerIP), _discoveryPort);
+                    string message = $"P2P:RESPONSE:{myName}:{GetMyIP()}";
+                    byte[] data = Encoding.UTF8.GetBytes(message);
+
+                    client.Send(data, data.Length, endpoint);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Response error: {ex.Message}");
+            }
+        }
+
+        private void CleanupOfflinePeers(object state)
+        {
+            var now = DateTime.Now;
+            var offlinePeers = new List<string>();
+
+            foreach (var kvp in _lastseen)
+            {
+                if ((now - kvp.Value).TotalMilliseconds > _peerTimeout)
+                {
+                    offlinePeers.Add(kvp.Key);
+                }
+            }
+
+            foreach (var ip in offlinePeers)
+            {
+                _lastseen.Remove(ip);
+                PeerDiscovered?.Invoke("", ip, "Offline");
+            }
+        }
+
+        private string GetMyIP()
+        {
+            try
+            {
+                var host = Dns.GetHostEntry(Dns.GetHostName());
+                foreach(var ip in host.AddressList)
+                {
+                    if (ip.AddressFamily == AddressFamily.InterNetwork)
+                    {
+                        return ip.ToString();
+                    }
+                }
+            }
+            catch { }
+            return "127.0.0.1";
+        }
+
+        public void StopDiscovery()
+        {
+            _cts?.Cancel();
+            _cleanupTimer?.Dispose();
+        }
+
+        public void Dispose()
+        {
+            StopDiscovery();
+            _udpClient?.Dispose();
+            _udpListener?.Dispose();
+        }
     }
 }

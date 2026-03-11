@@ -8,5 +8,6 @@
         <converters:StringNotEmptyConverter x:Key="StringNotEmptyConverter"/>
         <converters:StatusToColorConverter x:Key="StatusToColorConverter"/>
         <converters:FileSizeConverter x:Key="FileSizeConverter"/>
+        <converters:StringToColorConverter x:Key="StringToColorConverter"/>
     </Application.Resources>
 </Application>

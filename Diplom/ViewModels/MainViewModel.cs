@@ -15,6 +15,7 @@ namespace Diplom.ViewModels
     public class MainViewModel : INotifyPropertyChanged
     {
         private readonly NetworkService _networkService;
+        private readonly DiscoveryService _discoveryService;
         private string _statusMesssage;
         private string _selectedPeerIP;
         private bool _isServerRunning;
@@ -55,6 +56,8 @@ namespace Diplom.ViewModels
                 OnPropertyChanged(nameof(ServerStatusText));
                 OnPropertyChanged(nameof(ServerStatusColor));
                 CommandManager.InvalidateRequerySuggested();
+
+                UpdateMyStatus();
             }
         }
 
@@ -76,12 +79,16 @@ namespace Diplom.ViewModels
             Transfers = new ObservableCollection<FileTransfer>();
 
             _networkService = new NetworkService();
+            _discoveryService = new DiscoveryService();
+
             _networkService.LogMessage += OnLogMessage;
             _networkService.FileReceived += OnFileReceived;
-            _networkService.FileReceiveStarted += OnFileReceiveStarted;
+            //_networkService.FileReceiveStarted += OnFileReceiveStarted;
             _networkService.FileReceiveProgress += OnFileReceiveProgress;
             _networkService.ServerStarted += () => IsServerRunning = true;
             _networkService.ServerStopped += () => IsServerRunning = false;
+
+            _discoveryService.PeerDiscovered += OnPeerDiscovered;
 
             StartServerCommand = new RelayCommand(
                 async _ => await StartServer(),
@@ -98,28 +105,53 @@ namespace Diplom.ViewModels
             RefreshPeersCommand = new RelayCommand(
                 _ => RefreshPeers());
 
-            InitializeTestPeers();
+            _discoveryService.StartDiscovery(MyName);
+
+            StatusMessage = "Поиск пользователей в сети...";
         }
 
-        private void InitializeTestPeers()
+        private void OnPeerDiscovered(string name, string ip, string status)
         {
-            Peers.Clear();
-
-            if (Peers == null) return;
-
-
-            // В реальном приложении здесь будет обнаружение в сети
-            // Используем Dispatcher для работы с UI-потоком
             System.Windows.Application.Current.Dispatcher.Invoke(() =>
             {
-                Peers.Add(new Peer
+                var existingPeer = Peers.FirstOrDefault(p => p.IPAddress == ip);
+
+                if (status == "Offline")
                 {
-                    Name = "Компьютер А",
-                    IPAddress = "192.168.1.21",
-                    IsOnline = true,
-                    LastSeen = DateTime.Now
-                });
+                    if (existingPeer != null)
+                    {
+                        existingPeer.IsOnline = false;
+                    }
+                    return;
+                }
+
+                if (existingPeer == null)
+                {
+                    var peer = new Peer
+                    {
+                        Name = string.IsNullOrEmpty(name) ? $"Пользователь {ip}" : name,
+                        IPAddress = ip,
+                        IsOnline = true,
+                        LastSeen = DateTime.Now,
+                        Status = PeerStatus.ClientOnly
+                    };
+                    Peers.Add(peer);
+                    StatusMessage = $"Новый пользователь: {peer.DisplayName}";
+                }
+                else
+                {
+                    existingPeer.IsOnline = true;
+                    existingPeer.Name = name;
+                    existingPeer.LastSeen = DateTime.Now;
+                }
             });
+        }
+
+        private void UpdateMyStatus()
+        {
+            // Здесь можно отправить дополнительную информацию о своем статусе
+            // Но пока просто перезапустим обнаружение
+            _discoveryService.StartDiscovery(MyName);
         }
 
         private void UpdateSelectionPeerStatus()
@@ -142,29 +174,13 @@ namespace Diplom.ViewModels
                 await _networkService.StartServerAsync();
 
                 // После запуска сервера меняем наш статус
-                var myPeer = Peers.FirstOrDefault(p => p.Name == MyName);
-                if (myPeer == null)
+                var myPeer = Peers.FirstOrDefault(p => p.IPAddress == MyIP);
+                if (myPeer != null)
                 {
-                    // Добавляем себя в список
-                    myPeer = new Peer
-                    {
-                        Name = MyName,
-                        IPAddress = GetMyLocalIP(),
-                        IsOnline = true,
-                        Type = PeerType.Server
-                    };
-                    System.Windows.Application.Current.Dispatcher.Invoke(() =>
-                    {
-                        Peers.Add(myPeer);
-                    });
-                }
-                else
-                {
-                    myPeer.Type = PeerType.Server;
-                    myPeer.IsOnline = true;
+                    myPeer.Status = PeerStatus.ServerReady;
                 }
 
-                StatusMessage = "Сервер запущен и готов принимать файлы";
+                StatusMessage = $"Сервер запущен. Ваш IP: {MyIP}";
             }
             catch (Exception ex)
             {
@@ -178,10 +194,10 @@ namespace Diplom.ViewModels
             {
                 _networkService.StopServer();
 
-                var myPeer = Peers.FirstOrDefault(p => p.Name == MyName);
+                var myPeer = Peers.FirstOrDefault(p => p.IPAddress == MyIP);
                 if (myPeer != null)
                 {
-                    myPeer.Type = PeerType.Client;
+                    myPeer.Status = PeerStatus.ClientOnly;
                 }
 
                 StatusMessage = "Сервер остановлен.";
@@ -228,9 +244,6 @@ namespace Diplom.ViewModels
                     StatusMessage = $"Отправка файла: {fileName} на {SelectedPeerIP}";
                 });
 
-                string transferKey = $"{fileName}_{DateTime.Now.Ticks}";
-                _activeTransfers[transferKey] = transfer;
-
                 var progress = new Progress<double>(p =>
                 {
                     System.Windows.Application.Current.Dispatcher.Invoke(() =>
@@ -266,12 +279,9 @@ namespace Diplom.ViewModels
                         System.Windows.Application.Current.Dispatcher.Invoke(() =>
                         {
                             transfer.Status = FileTransfer.TransferStatus.Failed;
+                            OnPropertyChanged(nameof(Transfers));
                             StatusMessage = $"Ошибка отправки: {ex.Message}";
                         });
-                    }
-                    finally
-                    {
-                        _activeTransfers.Remove(transferKey);
                     }
                 });
             }
@@ -279,15 +289,8 @@ namespace Diplom.ViewModels
 
         private void RefreshPeers()
         {
-            // Здесь будет логика обнаружения пиров в сети
-            // Пока просто обновим статусы
-            foreach(var peer in Peers)
-            {
-                // В реальном приложении здесь пинг или UDP broadcast
-                peer.LastSeen = DateTime.Now;
-            }
-
-            StatusMessage = "Список пользователей обновлён";
+            _discoveryService.StartDiscovery(MyName);
+             StatusMessage = "Поиск пользователей...";
         }
 
         private void OnLogMessage(string message)
@@ -299,6 +302,8 @@ namespace Diplom.ViewModels
             });
         }
 
+
+        // остановился здесь
         private void OnFileReceived(string filePath, System.Net.Sockets.TcpClient client, string senderIP)
         {
             var fileName = System.IO.Path.GetFileName(filePath);
@@ -306,67 +311,19 @@ namespace Diplom.ViewModels
             // Добавляем историю в UI потоке
             System.Windows.Application.Current.Dispatcher.Invoke(() =>
             {
-                var transfer = Transfers.FirstOrDefault(t => 
-                    t.FileName == fileName && 
-                    t.Status == FileTransfer.TransferStatus.InProgress);
-
-                if (transfer != null)
+                var transform = new FileTransfer
                 {
-                    transfer.Status = FileTransfer.TransferStatus.Completed;
-                    transfer.Progress = 100;
-                }
-                else
-                {
-                    transfer = new FileTransfer
-                    {
-                        FileName = fileName,
-                        FileSize = new System.IO.FileInfo(filePath).Length,
-                        Sender = senderIP,
-                        Receiver = MyName,
-                        Timestamp = DateTime.Now,
-                        Status = FileTransfer.TransferStatus.Completed,
-                        Progress = 100
-                    };
-                    Transfers.Add(transfer);
-                }
+                    FileName = fileName,
+                    Sender = senderIP,
+                    Receiver = MyName,
+                    Timestamp = DateTime.Now,
+                    Status = FileTransfer.TransferStatus.Completed,
+                    Progress = 100
+                };
 
+                Transfers.Add(transform);
                 OnPropertyChanged(nameof(Transfers));
-                StatusMessage = $"Файл получен: {fileName} от {senderIP}";
-
-                string transferKey = $"{fileName}_{senderIP}";
-                _activeTransfers.Remove(transferKey);
-            });
-        }
-
-        private void OnFileReceiveStarted(string fileName, long fileSize, string senderName, string senderIP)
-        {
-            System.Windows.Application.Current.Dispatcher.Invoke(() =>
-            {
-                var existingTransfer = Transfers.FirstOrDefault(t =>
-                    t.FileName == fileName &&
-                    t.Sender == senderIP &&
-                    t.Status == FileTransfer.TransferStatus.InProgress);
-
-                if (existingTransfer == null)
-                {
-                    var transfer = new FileTransfer
-                    {
-                        FileName = fileName,
-                        FileSize = fileSize,
-                        Sender = senderIP,
-                        Receiver = MyName,
-                        Timestamp = DateTime.Now,
-                        Status = FileTransfer.TransferStatus.InProgress,
-                        Progress = 0
-                    };
-
-                    Transfers.Add(transfer);
-
-                    string transferKey = $"{fileName}_{senderIP}";
-                    _activeTransfers[transferKey] = transfer;
-                }
-
-                StatusMessage = $"Получение файла: {fileName} от {senderIP}";
+                StatusMessage = $"Получен файл: {fileName} от {senderIP}";
             });
         }
 
@@ -393,19 +350,16 @@ namespace Diplom.ViewModels
             try
             {
                 var host = System.Net.Dns.GetHostEntry(System.Net.Dns.GetHostName());
-                foreach(var ip in host.AddressList)
+                foreach (var ip in host.AddressList)
                 {
                     if (ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
                     {
                         return ip.ToString();
                     }
                 }
-                return "127.0.0.1";
             }
-            catch
-            {
-                return "127.0.0.1";
-            }
+            catch { }
+            return "127.0.0.1";
         }
 
         public event PropertyChangedEventHandler PropertyChanged;
