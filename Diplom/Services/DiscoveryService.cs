@@ -18,7 +18,7 @@ namespace Diplom.Services
         private readonly int _broadcastInterval = 5000; // 5 секунд 
         private readonly int _peerTimeout = 15000; // 15 секунд без ответа = офлайн
 
-        public event Action<string, string, string> PeerDiscovered; // событие для уведомления об обнаружении нового пира (имя, IP, статус)
+        public event Action<string, string, string, string> PeerDiscovered; // событие для уведомления об обнаружении нового пира (имя, IP, статус)
 
         private Dictionary<string, DateTime> _lastseen = new Dictionary<string, DateTime>();
 
@@ -33,6 +33,27 @@ namespace Diplom.Services
             Task.Run(() => BroadcastPresenceAsync(myName, _cts.Token));
 
             _cleanupTimer = new Timer(CleanupOfflinePeers, null, _peerTimeout, _peerTimeout);
+        }
+
+        public void BroadcastStatus(string myName, string status)
+        {
+            try
+            {
+                using (var client=new UdpClient())
+                {
+                    client.EnableBroadcast = true;
+                    var endpoint = new IPEndPoint(IPAddress.Broadcast, _discoveryPort);
+
+                    string message = $"P2P:STATUS:{myName}:{GetMyIP()}:{status}";
+                    byte[] data = Encoding.UTF8.GetBytes(message);
+
+                    client.Send(data, data.Length, endpoint);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Broadcast status error: {ex.Message}");
+            }
         }
 
         private async Task BroadcastPresenceAsync(string myName, CancellationToken token)
@@ -106,7 +127,7 @@ namespace Diplom.Services
                     _lastseen[senderIP] = DateTime.Now;
 
                     // Уведомляем о новом пользователе
-                    PeerDiscovered?.Invoke(peerName, senderIP, "Online");
+                    PeerDiscovered?.Invoke(peerName, senderIP, "Online", "ClientOnly");
 
                     RespondToPeer(senderIP, myName);
                 }
@@ -120,7 +141,20 @@ namespace Diplom.Services
 
                     _lastseen[senderIP] = DateTime.Now;
 
-                    PeerDiscovered?.Invoke(peerName, senderIP, "Online");
+                    PeerDiscovered?.Invoke(peerName, senderIP, "Online", "ClientOnly");
+                }
+            }
+            else if (message.StartsWith("P2P:STATUS:"))
+            {
+                string[] parts = message.Split(':');
+                if (parts.Length >= 5)
+                {
+                    string peerName = parts[2];
+                    string peerIP = parts[3];
+                    string peerStatus = parts[4];
+                    _lastseen[senderIP] = DateTime.Now;
+
+                    PeerDiscovered?.Invoke(peerName, senderIP, "Online", peerStatus);
                 }
             }
         }
@@ -160,7 +194,7 @@ namespace Diplom.Services
             foreach (var ip in offlinePeers)
             {
                 _lastseen.Remove(ip);
-                PeerDiscovered?.Invoke("", ip, "Offline");
+                PeerDiscovered?.Invoke("", ip, "Offline", "");
             }
         }
 

@@ -110,13 +110,13 @@ namespace Diplom.ViewModels
             StatusMessage = "Поиск пользователей в сети...";
         }
 
-        private void OnPeerDiscovered(string name, string ip, string status)
+        private void OnPeerDiscovered(string name, string ip, string onlineStatus, string serverStatus)
         {
             System.Windows.Application.Current.Dispatcher.Invoke(() =>
             {
                 var existingPeer = Peers.FirstOrDefault(p => p.IPAddress == ip);
 
-                if (status == "Offline")
+                if (onlineStatus == "Offline")
                 {
                     if (existingPeer != null)
                     {
@@ -133,7 +133,7 @@ namespace Diplom.ViewModels
                         IPAddress = ip,
                         IsOnline = true,
                         LastSeen = DateTime.Now,
-                        Status = PeerStatus.ClientOnly
+                        Status = serverStatus == "ServerReady" ? PeerStatus.ServerReady : PeerStatus.ClientOnly,
                     };
                     Peers.Add(peer);
                     StatusMessage = $"Новый пользователь: {peer.DisplayName}";
@@ -143,6 +143,7 @@ namespace Diplom.ViewModels
                     existingPeer.IsOnline = true;
                     existingPeer.Name = name;
                     existingPeer.LastSeen = DateTime.Now;
+                    existingPeer.Status = serverStatus == "ServerReady" ? PeerStatus.ServerReady : PeerStatus.ClientOnly;
                 }
             });
         }
@@ -173,12 +174,7 @@ namespace Diplom.ViewModels
                 StatusMessage = "Запуск сервера...";
                 await _networkService.StartServerAsync();
 
-                // После запуска сервера меняем наш статус
-                var myPeer = Peers.FirstOrDefault(p => p.IPAddress == MyIP);
-                if (myPeer != null)
-                {
-                    myPeer.Status = PeerStatus.ServerReady;
-                }
+                _discoveryService.BroadcastStatus(MyName, "ServerReady");
 
                 StatusMessage = $"Сервер запущен. Ваш IP: {MyIP}";
             }
@@ -194,11 +190,7 @@ namespace Diplom.ViewModels
             {
                 _networkService.StopServer();
 
-                var myPeer = Peers.FirstOrDefault(p => p.IPAddress == MyIP);
-                if (myPeer != null)
-                {
-                    myPeer.Status = PeerStatus.ClientOnly;
-                }
+                _discoveryService.BroadcastStatus(MyName, "ClientOnly");
 
                 StatusMessage = "Сервер остановлен.";
             }
@@ -328,7 +320,6 @@ namespace Diplom.ViewModels
             });
         }
 
-        // остановился здесь
         private void OnFileReceived(string filePath, System.Net.Sockets.TcpClient client, string senderIP)
         {
             var fileName = System.IO.Path.GetFileName(filePath);
@@ -336,17 +327,31 @@ namespace Diplom.ViewModels
             // Добавляем историю в UI потоке
             System.Windows.Application.Current.Dispatcher.Invoke(() =>
             {
-                var transform = new FileTransfer
-                {
-                    FileName = fileName,
-                    Sender = senderIP,
-                    Receiver = MyName,
-                    Timestamp = DateTime.Now,
-                    Status = FileTransfer.TransferStatus.Completed,
-                    Progress = 100
-                };
+                var existingTransfer = Transfers.FirstOrDefault(t =>
+                    t.FileName == fileName &&
+                    t.Sender == senderIP &&
+                    t.Status == FileTransfer.TransferStatus.InProgress);
 
-                Transfers.Add(transform);
+                if (existingTransfer != null)
+                {
+                    existingTransfer.Status = FileTransfer.TransferStatus.Completed;
+                    existingTransfer.Progress = 100;
+                }
+                else
+                {
+                    var transform = new FileTransfer
+                    {
+                        FileName = fileName,
+                        FileSize = new System.IO.FileInfo(filePath).Length,
+                        Sender = senderIP,
+                        Receiver = MyName,
+                        Timestamp = DateTime.Now,
+                        Status = FileTransfer.TransferStatus.Completed,
+                        Progress = 100
+                    };
+
+                    Transfers.Add(transform);
+                }
                 OnPropertyChanged(nameof(Transfers));
                 StatusMessage = $"Получен файл: {fileName} от {senderIP}";
             });
