@@ -16,6 +16,10 @@ namespace Diplom.ViewModels
     {
         private readonly NetworkService _networkService;
         private readonly DiscoveryService _discoveryService;
+        private readonly CryptoService _cryptoService;
+
+        private readonly SecureTransferService _secureTransfer;
+
         private string _statusMesssage;
         private string _selectedPeerIP;
         private bool _isServerRunning;
@@ -72,6 +76,8 @@ namespace Diplom.ViewModels
         public ICommand SendFileCommand { get; }
         public ICommand RefreshPeersCommand { get; }
 
+        public ICommand EstablishSecureConnectionCommand { get; }
+
         public MainViewModel()
         {
             // Инициализация коллекции в конструкторе
@@ -80,6 +86,23 @@ namespace Diplom.ViewModels
 
             _networkService = new NetworkService();
             _discoveryService = new DiscoveryService();
+            _cryptoService = new CryptoService();
+
+            _secureTransfer = new SecureTransferService(_cryptoService, _networkService);
+
+            // Инициализируем крипто-ключи
+            Task.Run(async () =>
+            {
+                await _cryptoService.InitializeKeysAsync();
+
+                // Передаем публичный ключ в DiscoveryService
+                _discoveryService.MyPublicKeyBase64 = _cryptoService.GetPublicKeyBase64();
+
+                System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                {
+                    StatusMessage = $"ключи RSA загружены. Отпечаток: {_cryptoService.GetPublicKeyFingerprint()}";
+                });
+            });
 
             _networkService.LogMessage += OnLogMessage;
             _networkService.FileReceived += OnFileReceived;
@@ -105,12 +128,16 @@ namespace Diplom.ViewModels
             RefreshPeersCommand = new RelayCommand(
                 _ => RefreshPeers());
 
+            EstablishSecureConnectionCommand = new RelayCommand(
+                async _ => await EstablishSecureConnection(),
+                _ => !string.IsNullOrEmpty(SelectedPeerIP) && !IsConnectionEstablished(SelectedPeerIP));
+
             _discoveryService.StartDiscovery(MyName);
 
             StatusMessage = "Поиск пользователей в сети...";
         }
 
-        private void OnPeerDiscovered(string name, string ip, string onlineStatus, string serverStatus)
+        private void OnPeerDiscovered(string name, string ip, string onlineStatus, string serverStatus, string publicKeyBase64)
         {
             System.Windows.Application.Current.Dispatcher.Invoke(() =>
             {
@@ -134,7 +161,13 @@ namespace Diplom.ViewModels
                         IsOnline = true,
                         LastSeen = DateTime.Now,
                         Status = serverStatus == "ServerReady" ? PeerStatus.ServerReady : PeerStatus.ClientOnly,
+                        PublicKeyBase64 = publicKeyBase64
                     };
+
+                    if (!string.IsNullOrEmpty(publicKeyBase64))
+                    {
+                        peer.PublicKey = _cryptoService.ImportPublicKeyFromBase64(publicKeyBase64);
+                    }
                     Peers.Add(peer);
                     StatusMessage = $"Новый пользователь: {peer.DisplayName}";
                 }
@@ -144,6 +177,14 @@ namespace Diplom.ViewModels
                     existingPeer.Name = name;
                     existingPeer.LastSeen = DateTime.Now;
                     existingPeer.Status = serverStatus == "ServerReady" ? PeerStatus.ServerReady : PeerStatus.ClientOnly;
+
+                    if (!string.IsNullOrEmpty(publicKeyBase64) && existingPeer.PublicKeyBase64 != publicKeyBase64)
+                    {
+                        existingPeer.PublicKeyBase64 = publicKeyBase64;
+                        existingPeer.PublicKey = _cryptoService.ImportPublicKeyFromBase64(publicKeyBase64);
+
+                        StatusMessage = $"Обновлен публичный ключ для {existingPeer.DisplayName}";
+                    }
                 }
             });
         }
@@ -200,11 +241,18 @@ namespace Diplom.ViewModels
             }
         }
 
-        private void SendFile()
+        private async void SendFile()
         {
             if (string.IsNullOrEmpty(SelectedPeerIP))
             {
                 StatusMessage = "Выберите получателя";
+                return;
+            }
+
+            // Проверяем, есть ли защищённое соединение
+            if (!_secureTransfer.HasSecureConnection(SelectedPeerIP))
+            {
+                StatusMessage = "Сначала установите защищённое соединение (кнопка '🔒 Соединение')";
                 return;
             }
 
@@ -233,7 +281,7 @@ namespace Diplom.ViewModels
                 System.Windows.Application.Current.Dispatcher.Invoke(() =>
                 {
                     Transfers.Add(transfer);
-                    StatusMessage = $"Отправка файла: {fileName} на {SelectedPeerIP}";
+                    StatusMessage = $"Отправка файла: {fileName} на {SelectedPeerIP} (защищённо)";
                 });
 
                 var progress = new Progress<double>(p =>
@@ -245,25 +293,21 @@ namespace Diplom.ViewModels
                     });
                 });
 
-                // Отправляем файл в фоновом потоке
-                Task.Run(async () =>
+                await Task.Run(async () =>
                 {
                     try
                     {
-                        await _networkService.SendFileAsync(
+                        await _secureTransfer.SendFileSecureAsync(
                             openFileDialog.FileName,
                             SelectedPeerIP,
-                            MyName,
                             progress);
 
-                        // Обновляем статус в UI потоке
                         System.Windows.Application.Current.Dispatcher.Invoke(() =>
                         {
                             transfer.Status = FileTransfer.TransferStatus.Completed;
                             transfer.Progress = 100;
                             OnPropertyChanged(nameof(Transfers));
-
-                            StatusMessage = $"Файл '{fileName}' отправлен на {SelectedPeerIP}";
+                            StatusMessage = $"Файл '{fileName}' отправлен защищённо на {SelectedPeerIP}";
                         });
                     }
                     catch (Exception ex)
@@ -292,6 +336,36 @@ namespace Diplom.ViewModels
             {
                 StatusMessage = message;
             });
+        }
+
+        private async Task EstablishSecureConnection()
+        {
+            if (string.IsNullOrEmpty(SelectedPeerIP)) return;
+
+            var peer = Peers.FirstOrDefault(p => p.IPAddress == SelectedPeerIP);
+            if (peer == null || peer.PublicKey == null)
+            {
+                StatusMessage = "Нет публичного ключа получателя";
+                return;
+            }
+
+            StatusMessage = $"Установка защищённого соединения с {peer.DisplayName}...";
+
+            bool success = await _secureTransfer.InitiateHandshakeAsync(SelectedPeerIP, peer.PublicKey.Value);
+
+            if (success)
+            {
+                StatusMessage = $"Защищённое соединение с {peer.DisplayName} установлено";
+            }
+            else
+            {
+                StatusMessage = $"Не удалось установить соединение с {peer.DisplayName}";
+            }
+        }
+
+        private bool IsConnectionEstablished(string ip)
+        {
+            return _secureTransfer.HasSecureConnection(ip);
         }
 
         private void OnFileReceiveStarted(string fileName, long fileSize, string senderName, string senderIP)

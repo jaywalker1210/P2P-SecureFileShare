@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -14,6 +15,9 @@ namespace Diplom.Models
         public DateTime LastSeen { get; set; } = DateTime.Now;
 
         public PeerStatus Status { get; set; } = PeerStatus.Unknown;
+
+        public RSAParameters? PublicKey { get; set; }
+        public string PublicKeyBase64 { get; set; } = string.Empty;
 
         public string DisplayStatus
         {
@@ -44,6 +48,19 @@ namespace Diplom.Models
         }
 
         public string DisplayName => $"{Name} ({IPAddress})";
+
+        public string KeyFingerprint
+        {
+            get
+            {
+                if (string.IsNullOrEmpty(PublicKeyBase64)) return "Нет ключа";
+                using (var sha256 = System.Security.Cryptography.SHA256.Create())
+                {
+                    byte[] hash = sha256.ComputeHash(System.Text.Encoding.UTF8.GetBytes(PublicKeyBase64));
+                    return BitConverter.ToString(hash, 0, 6).Replace("-", "").ToUpper();
+                }
+            }
+        }
     }
 
     public enum PeerStatus

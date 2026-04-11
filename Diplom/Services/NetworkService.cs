@@ -22,6 +22,11 @@ namespace Diplom.Services
         public event Action<string, long, string,string> FileReceiveStarted;
         public event Action<string, double> FileReceiveProgress;
 
+        // Новые события для Handshake и защищённой передачи
+        public event Action<string, byte[], byte[]> HandshakeRequestReceived; // senderIP, encryptedAesKey, signature
+        public event Action<string, byte[]> HandshakeResponseReceived; // senderIP, signature
+        public event Action<string, string, byte[], byte[], byte[]> SecureFileReceived; // senderIP, fileName, encryptedFile, expectedHash, signature
+
         public async Task StartServerAsync()
         {
             _cancellationTokenSource = new CancellationTokenSource();
@@ -63,14 +68,38 @@ namespace Diplom.Services
                 try
                 {
                     var clientEndPoint = client.Client.RemoteEndPoint.ToString();
-                    var clientIP = clientEndPoint.Split(':')[0]; // Только IP-адрес без порта
+                    var clientIP = clientEndPoint.Split(':')[0];
 
-                    // Читаем тип сообщения (1 = файл)
                     byte messageType = reader.ReadByte();
 
-                    if (messageType == 1) // Файл
+                    if (messageType == 1) // Обычный файл
                     {
                         await ReceiveFileAsync(reader, client, clientIP);
+                    }
+                    else if (messageType == 2) // Handshake запрос
+                    {
+                        int keyLen = reader.ReadInt32();
+                        byte[] encryptedAesKey = reader.ReadBytes(keyLen);
+                        int sigLen = reader.ReadInt32();
+                        byte[] signature = reader.ReadBytes(sigLen);
+                        HandshakeRequestReceived?.Invoke(clientIP, encryptedAesKey, signature);
+                    }
+                    else if (messageType == 3) // Handshake ответ
+                    {
+                        int sigLen = reader.ReadInt32();
+                        byte[] signature = reader.ReadBytes(sigLen);
+                        HandshakeResponseReceived?.Invoke(clientIP, signature);
+                    }
+                    else if (messageType == 4) // Защищённый файл
+                    {
+                        string fileName = reader.ReadString();
+                        int fileLen = reader.ReadInt32();
+                        byte[] encryptedFile = reader.ReadBytes(fileLen);
+                        int hashLen = reader.ReadInt32();
+                        byte[] expectedHash = reader.ReadBytes(hashLen);
+                        int sigLen = reader.ReadInt32();
+                        byte[] signature = reader.ReadBytes(sigLen);
+                        SecureFileReceived?.Invoke(clientIP, fileName, encryptedFile, expectedHash, signature);
                     }
                 }
                 catch (Exception ex)
@@ -179,6 +208,94 @@ namespace Diplom.Services
             catch (Exception ex)
             {
                 LogMessage?.Invoke($"Ошибка отправки: {ex.Message}");
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Отправка Handshake запроса
+        /// </summary>
+        public async Task SendHandshakeRequestAsync(string receiverIP, byte[] encryptedAesKey, byte[] signature)
+        {
+            try
+            {
+                using (TcpClient client = new TcpClient())
+                {
+                    await client.ConnectAsync(receiverIP, _port);
+
+                    using (NetworkStream stream = client.GetStream())
+                    using (BinaryWriter writer = new BinaryWriter(stream))
+                    {
+                        writer.Write((byte)2); // Тип сообщения: Handshake запрос
+                        writer.Write(encryptedAesKey.Length);
+                        writer.Write(encryptedAesKey);
+                        writer.Write(signature.Length);
+                        writer.Write(signature);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogMessage?.Invoke($"Handshake send error: {ex.Message}");
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Отправка Handshake ответа
+        /// </summary>
+        public async Task SendHandshakeResponseAsync(string receiverIP, byte[] signature)
+        {
+            try
+            {
+                using (TcpClient client = new TcpClient())
+                {
+                    await client.ConnectAsync(receiverIP, _port);
+
+                    using (NetworkStream stream = client.GetStream())
+                    using (BinaryWriter writer = new BinaryWriter(stream))
+                    {
+                        writer.Write((byte)3); // Тип сообщения: Handshake ответ
+                        writer.Write(signature.Length);
+                        writer.Write(signature);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogMessage?.Invoke($"Handshake response error: {ex.Message}");
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Отправка защищённого файла
+        /// </summary>
+        public async Task SendSecureFileAsync(string receiverIP, string fileName, byte[] encryptedFile, byte[] expectedHash, byte[] signature, IProgress<double> progress = null)
+        {
+            try
+            {
+                using (TcpClient client = new TcpClient())
+                {
+                    await client.ConnectAsync(receiverIP, _port);
+
+                    using (NetworkStream stream = client.GetStream())
+                    using (BinaryWriter writer = new BinaryWriter(stream))
+                    {
+                        writer.Write((byte)4); // Тип сообщения: Защищённый файл
+                        writer.Write(fileName);
+                        writer.Write(encryptedFile.Length);
+                        writer.Write(encryptedFile);
+                        writer.Write(expectedHash.Length);
+                        writer.Write(expectedHash);
+                        writer.Write(signature.Length);
+                        writer.Write(signature);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogMessage?.Invoke($"Secure send error: {ex.Message}");
                 throw;
             }
         }

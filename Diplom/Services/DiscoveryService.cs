@@ -18,11 +18,13 @@ namespace Diplom.Services
         private readonly int _broadcastInterval = 5000; // 5 секунд 
         private readonly int _peerTimeout = 15000; // 15 секунд без ответа = офлайн
 
-        public event Action<string, string, string, string> PeerDiscovered; // событие для уведомления об обнаружении нового пира (имя, IP, статус)
+        public event Action<string, string, string, string, string> PeerDiscovered; // событие для уведомления об обнаружении нового пира (имя, IP, статус)
 
         private Dictionary<string, DateTime> _lastseen = new Dictionary<string, DateTime>();
 
         private Timer _cleanupTimer; // таймер для проверки онлайн статуса
+
+        public string MyPublicKeyBase64 { get; set; } = string.Empty;
 
         public void StartDiscovery(string myName)
         {
@@ -44,7 +46,7 @@ namespace Diplom.Services
                     client.EnableBroadcast = true;
                     var endpoint = new IPEndPoint(IPAddress.Broadcast, _discoveryPort);
 
-                    string message = $"P2P:STATUS:{myName}:{GetMyIP()}:{status}";
+                    string message = $"P2P:STATUS:{myName}:{GetMyIP()}:{status}:{MyPublicKeyBase64}";
                     byte[] data = Encoding.UTF8.GetBytes(message);
 
                     client.Send(data, data.Length, endpoint);
@@ -67,7 +69,7 @@ namespace Diplom.Services
                 {
                     try
                     {
-                        string message = $"P2P:DISCOVERY:{myName}:{GetMyIP()}";
+                        string message = $"P2P:DISCOVERY:{myName}:{GetMyIP()}:{MyPublicKeyBase64}";
                         byte[] data = Encoding.UTF8.GetBytes(message);
 
                         await client.SendAsync(data, data.Length, endpoint);
@@ -123,11 +125,12 @@ namespace Diplom.Services
                 if (parts.Length >= 3)
                 {
                     string peerName = parts[2];
+                    string peerPublicKey = parts.Length >= 4 ? parts[3] : string.Empty;
 
                     _lastseen[senderIP] = DateTime.Now;
 
                     // Уведомляем о новом пользователе
-                    PeerDiscovered?.Invoke(peerName, senderIP, "Online", "ClientOnly");
+                    PeerDiscovered?.Invoke(peerName, senderIP, "Online", "ClientOnly", peerPublicKey);
 
                     RespondToPeer(senderIP, myName);
                 }
@@ -138,10 +141,11 @@ namespace Diplom.Services
                 if (parts.Length >= 3)
                 {
                     string peerName = parts[2];
+                    string peerPublicKey = parts.Length >= 4 ? parts[3] : string.Empty;
 
                     _lastseen[senderIP] = DateTime.Now;
 
-                    PeerDiscovered?.Invoke(peerName, senderIP, "Online", "ClientOnly");
+                    PeerDiscovered?.Invoke(peerName, senderIP, "Online", "ClientOnly", peerPublicKey);
                 }
             }
             else if (message.StartsWith("P2P:STATUS:"))
@@ -153,8 +157,9 @@ namespace Diplom.Services
                     string peerIP = parts[3];
                     string peerStatus = parts[4];
                     _lastseen[senderIP] = DateTime.Now;
+                    string peerPublicKey = parts.Length >= 6 ? parts[5] : string.Empty;
 
-                    PeerDiscovered?.Invoke(peerName, senderIP, "Online", peerStatus);
+                    PeerDiscovered?.Invoke(peerName, senderIP, "Online", peerStatus, peerPublicKey);
                 }
             }
         }
@@ -166,7 +171,7 @@ namespace Diplom.Services
                 using (var client = new UdpClient())
                 {
                     var endpoint = new IPEndPoint(IPAddress.Parse(peerIP), _discoveryPort);
-                    string message = $"P2P:RESPONSE:{myName}:{GetMyIP()}";
+                    string message = $"P2P:RESPONSE:{myName}:{GetMyIP()}:{MyPublicKeyBase64}";
                     byte[] data = Encoding.UTF8.GetBytes(message);
 
                     client.Send(data, data.Length, endpoint);
@@ -194,7 +199,7 @@ namespace Diplom.Services
             foreach (var ip in offlinePeers)
             {
                 _lastseen.Remove(ip);
-                PeerDiscovered?.Invoke("", ip, "Offline", "");
+                PeerDiscovered?.Invoke("", ip, "Offline", "", "");
             }
         }
 

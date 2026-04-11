@@ -193,7 +193,31 @@
                 </Button.Style>
             </Button>
 
-            <!-- Кнопка отправки файла -->
+            <!-- ✅ НОВАЯ КНОПКА: Установить защищённое соединение -->
+            <Button Content="🔒 Установить соединение" 
+                    Command="{Binding EstablishSecureConnectionCommand}" 
+                    Margin="5" Padding="20,10" 
+                    Background="#FF9800" Foreground="White" 
+                    FontWeight="Bold" FontSize="14"
+                    ToolTip="Сначала выберите пользователя, затем установите защищённое соединение">
+                <Button.Style>
+                    <Style TargetType="Button">
+                        <Setter Property="IsEnabled" Value="False"/>
+                        <Style.Triggers>
+                            <MultiDataTrigger>
+                                <MultiDataTrigger.Conditions>
+                                    <Condition Binding="{Binding IsServerRunning}" Value="True"/>
+                                    <Condition Binding="{Binding SelectedPeerIP, Converter={StaticResource StringNotEmptyConverter}}" Value="True"/>
+                                </MultiDataTrigger.Conditions>
+                                <Setter Property="IsEnabled" Value="True"/>
+                                <Setter Property="Background" Value="#FF9800"/>
+                            </MultiDataTrigger>
+                            </Style.Triggers>
+                    </Style>
+                </Button.Style>
+            </Button>
+
+                <!-- Кнопка отправки файла -->
             <Button Content="📤 Отправить файл" Command="{Binding SendFileCommand}" Margin="5" Padding="20,10" Background="#2196f3" Foreground="White" FontWeight="Bold" FontSize="14" ToolTip="Выберите файл для отправки выбранному пользователю">
                 <Button.Style>
                     <Style TargetType="Button">
