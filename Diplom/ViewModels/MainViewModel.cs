@@ -357,32 +357,10 @@ namespace Diplom.ViewModels
                     IPAddress = ip,
                     IsOnline = true,
                     LastSeen = DateTime.Now,
-                    Status = PeerStatus.ClientOnly
+                    Status = PeerStatus.ClientOnly,
+                    PublicKey = _cryptoService.GetPublicKey()
                 };
 
-                Peers.Add(peer);
-                StatusMessage = $"Добавлен пользователь: {peer.DisplayName}";
-            }
-        }
-
-        // Альтернативный простой диалог без VisualBasic
-        private void AddPeerManually()
-        {
-            string ip = System.Windows.Forms.Interaction.InputBox(
-                "Введите IP адрес получателя:",
-                "Ручное добавление пира",
-                "192.168.1.99");
-
-            if (!string.IsNullOrEmpty(ip))
-            {
-                var peer = new Peer
-                {
-                    Name = $"Пользователь {ip}",
-                    IPAddress = ip,
-                    IsOnline = true,
-                    LastSeen = DateTime.Now,
-                    Status = PeerStatus.ClientOnly
-                };
                 Peers.Add(peer);
                 StatusMessage = $"Добавлен пользователь: {peer.DisplayName}";
             }
@@ -402,7 +380,12 @@ namespace Diplom.ViewModels
             if (string.IsNullOrEmpty(SelectedPeerIP)) return;
 
             var peer = Peers.FirstOrDefault(p => p.IPAddress == SelectedPeerIP);
-            if (peer == null || peer.PublicKey == null)
+            if (peer == null)
+            {
+                StatusMessage = "Нет такого получателя";
+                return;
+            }
+            else if(peer.PublicKey == null)
             {
                 StatusMessage = "Нет публичного ключа получателя";
                 return;

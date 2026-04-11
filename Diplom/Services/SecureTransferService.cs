@@ -202,27 +202,30 @@ namespace Diplom.Services
                 aes.Mode = CipherMode.CBC;
                 aes.Padding = PaddingMode.PKCS7;
 
-                byte[] iv = new byte[12]; // GCM рекомендует 12 байт для IV
+                // Генерируем случайный IV (16 байт для CBC)
+                byte[] iv = new byte[16];
                 using (RandomNumberGenerator rng = RandomNumberGenerator.Create())
                 {
                     rng.GetBytes(iv);
                 }
+                aes.IV = iv;
 
-                byte[] tag = new byte[16];
-                byte[] ciphertext = new byte[data.Length];
-
+                // Шифруем данные
                 using (var encryptor = aes.CreateEncryptor())
+                using (var ms = new MemoryStream())
                 {
-                    encryptor.TransformBlock(data, 0, data.Length, ciphertext, 0);
+                    // Сначала пишем IV
+                    ms.Write(iv, 0, iv.Length);
+
+                    // Шифруем и пишем данные
+                    using (var cs = new CryptoStream(ms, encryptor, CryptoStreamMode.Write))
+                    {
+                        cs.Write(data, 0, data.Length);
+                        cs.FlushFinalBlock();
+                    }
+
+                    return ms.ToArray();
                 }
-
-                // Объединяем IV + шифротекст + тег
-                byte[] result = new byte[iv.Length + ciphertext.Length + tag.Length];
-                Buffer.BlockCopy(iv, 0, result, 0, iv.Length);
-                Buffer.BlockCopy(ciphertext, 0, result, iv.Length, ciphertext.Length);
-                Buffer.BlockCopy(tag, 0, result, iv.Length + ciphertext.Length, tag.Length);
-
-                return result;
             }
         }
 
@@ -234,26 +237,24 @@ namespace Diplom.Services
                 aes.Mode = CipherMode.CBC;
                 aes.Padding = PaddingMode.PKCS7;
 
-                // Извлекаем IV (первые 12 байт)
-                byte[] iv = new byte[12];
-                Buffer.BlockCopy(encryptedData, 0, iv, 0, 12);
+                // Извлекаем IV (первые 16 байт)
+                byte[] iv = new byte[16];
+                Buffer.BlockCopy(encryptedData, 0, iv, 0, 16);
+                aes.IV = iv;
 
-                // Извлекаем тег (последние 16 байт)
-                byte[] tag = new byte[16];
-                Buffer.BlockCopy(encryptedData, encryptedData.Length - 16, tag, 0, 16);
+                // Извлекаем зашифрованные данные (остальное)
+                byte[] ciphertext = new byte[encryptedData.Length - 16];
+                Buffer.BlockCopy(encryptedData, 16, ciphertext, 0, ciphertext.Length);
 
-                // Извлекаем шифротекст
-                byte[] ciphertext = new byte[encryptedData.Length - 12 - 16];
-                Buffer.BlockCopy(encryptedData, 12, ciphertext, 0, ciphertext.Length);
-
-                byte[] plaintext = new byte[ciphertext.Length];
-
+                // Расшифровываем
                 using (var decryptor = aes.CreateDecryptor())
+                using (var ms = new MemoryStream(ciphertext))
+                using (var cs = new CryptoStream(ms, decryptor, CryptoStreamMode.Read))
+                using (var resultMs = new MemoryStream())
                 {
-                    decryptor.TransformBlock(ciphertext, 0, ciphertext.Length, plaintext, 0);
+                    cs.CopyTo(resultMs);
+                    return resultMs.ToArray();
                 }
-
-                return plaintext;
             }
         }
 

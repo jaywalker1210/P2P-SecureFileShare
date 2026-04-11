@@ -190,5 +190,8 @@ namespace Diplom.Services
         /// Проверяем, загружены ли ключи (для UI)
         /// </summary>
         public bool IsKeysLoaded() => _keysLoaded;
+
+        // Для тестирования
+        public RSAParameters GetPublicKey() => _publicKey;
     }
 }
