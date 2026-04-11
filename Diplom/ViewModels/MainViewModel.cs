@@ -78,6 +78,8 @@ namespace Diplom.ViewModels
 
         public ICommand EstablishSecureConnectionCommand { get; }
 
+        public ICommand AddPeerManuallyCommand { get; }
+
         public MainViewModel()
         {
             // Инициализация коллекции в конструкторе
@@ -89,6 +91,8 @@ namespace Diplom.ViewModels
             _cryptoService = new CryptoService();
 
             _secureTransfer = new SecureTransferService(_cryptoService, _networkService);
+
+
 
             // Инициализируем крипто-ключи
             Task.Run(async () =>
@@ -131,6 +135,8 @@ namespace Diplom.ViewModels
             EstablishSecureConnectionCommand = new RelayCommand(
                 async _ => await EstablishSecureConnection(),
                 _ => !string.IsNullOrEmpty(SelectedPeerIP) && !IsConnectionEstablished(SelectedPeerIP));
+
+            AddPeerManuallyCommand = new RelayCommand(_ => AddPeerManually());
 
             _discoveryService.StartDiscovery(MyName);
 
@@ -327,6 +333,59 @@ namespace Diplom.ViewModels
         {
             _discoveryService.StartDiscovery(MyName);
              StatusMessage = "Поиск пользователей...";
+        }
+
+        // Метод для ручного добавления
+        private void AddPeerManually()
+        {
+            var dialog = new Microsoft.Win32.SaveFileDialog();
+            dialog.Title = "Введите IP адрес получателя";
+            dialog.FileName = ""; // Не сохраняем файл
+
+            // Простой ввод через диалог
+            string ip = Microsoft.VisualBasic.Interaction.InputBox(
+                "Введите IP адрес компьютера получателя:",
+                "Ручное добавление пира",
+                "192.168.1.99");
+
+            if (!string.IsNullOrEmpty(ip))
+            {
+                // Добавляем пира вручную
+                var peer = new Peer
+                {
+                    Name = $"Пользователь {ip}",
+                    IPAddress = ip,
+                    IsOnline = true,
+                    LastSeen = DateTime.Now,
+                    Status = PeerStatus.ClientOnly
+                };
+
+                Peers.Add(peer);
+                StatusMessage = $"Добавлен пользователь: {peer.DisplayName}";
+            }
+        }
+
+        // Альтернативный простой диалог без VisualBasic
+        private void AddPeerManually()
+        {
+            string ip = System.Windows.Forms.Interaction.InputBox(
+                "Введите IP адрес получателя:",
+                "Ручное добавление пира",
+                "192.168.1.99");
+
+            if (!string.IsNullOrEmpty(ip))
+            {
+                var peer = new Peer
+                {
+                    Name = $"Пользователь {ip}",
+                    IPAddress = ip,
+                    IsOnline = true,
+                    LastSeen = DateTime.Now,
+                    Status = PeerStatus.ClientOnly
+                };
+                Peers.Add(peer);
+                StatusMessage = $"Добавлен пользователь: {peer.DisplayName}";
+            }
         }
 
         private void OnLogMessage(string message)
