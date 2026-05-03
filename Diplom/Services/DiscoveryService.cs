@@ -46,7 +46,7 @@ namespace Diplom.Services
                     client.EnableBroadcast = true;
                     var endpoint = new IPEndPoint(IPAddress.Broadcast, _discoveryPort);
 
-                    string message = $"P2P:STATUS:{myName}:{GetMyIP()}:{status}:{MyPublicKeyBase64}";
+                    string message = $"P2P:STATUS:{myName}:{GetMyIP()}:{status}|{MyPublicKeyBase64}";
                     byte[] data = Encoding.UTF8.GetBytes(message);
 
                     client.Send(data, data.Length, endpoint);
@@ -69,7 +69,7 @@ namespace Diplom.Services
                 {
                     try
                     {
-                        string message = $"P2P:DISCOVERY:{myName}:{GetMyIP()}:{MyPublicKeyBase64}";
+                        string message = $"P2P:DISCOVERY:{myName}:{GetMyIP()}|{MyPublicKeyBase64}";
                         byte[] data = Encoding.UTF8.GetBytes(message);
 
                         await client.SendAsync(data, data.Length, endpoint);
@@ -119,48 +119,74 @@ namespace Diplom.Services
 
         private void ProcessDiscoveryMessage(string message, string senderIP, string myName)
         {
+            System.Diagnostics.Debug.WriteLine($"UDP от {senderIP}: {message}");
             if (message.StartsWith("P2P:DISCOVERY:"))
             {
-                string[] parts = message.Split(':');
-                if (parts.Length >= 3)
+                string withoutPrefix = message.Substring("P2P:DISCOVERY:".Length);
+                int separatorIndex = withoutPrefix.LastIndexOf('|');
+
+                string nameAndIP;
+                string peerPublicKey = "";
+
+                if (separatorIndex > 0)
                 {
-                    string peerName = parts[2];
-                    string peerPublicKey = parts.Length >= 4 ? parts[3] : string.Empty;
-
-                    _lastseen[senderIP] = DateTime.Now;
-
-                    // Уведомляем о новом пользователе
-                    PeerDiscovered?.Invoke(peerName, senderIP, "Online", "ClientOnly", peerPublicKey);
-
-                    RespondToPeer(senderIP, myName);
+                    nameAndIP = withoutPrefix.Substring(0, separatorIndex);
+                    peerPublicKey = withoutPrefix.Substring(separatorIndex + 1);
                 }
+                else
+                {
+                    nameAndIP = withoutPrefix;
+                }
+
+                string[] parts = nameAndIP.Split(':');
+                string peerName = parts.Length >= 1 ? parts[0] : "Unknown";
+                string peerIP = parts.Length >= 2 ? parts[1] : senderIP;
+
+                _lastseen[senderIP] = DateTime.Now;
+                PeerDiscovered?.Invoke(peerName, peerIP, "Online", "ClientOnly", peerPublicKey);
+                RespondToPeer(senderIP, myName);
             }
             else if (message.StartsWith("P2P:RESPONSE:"))
             {
-                string[] parts = message.Split(':');
-                if (parts.Length >= 3)
-                {
-                    string peerName = parts[2];
-                    string peerPublicKey = parts.Length >= 4 ? parts[3] : string.Empty;
+                string withoutPrefix = message.Substring("P2P:RESPONSE:".Length);
+                int separatorIndex = withoutPrefix.LastIndexOf('|');
 
-                    _lastseen[senderIP] = DateTime.Now;
+                string nameAndIP = separatorIndex > 0 ? withoutPrefix.Substring(0, separatorIndex) : withoutPrefix;
+                string peerPublicKey = separatorIndex > 0 ? withoutPrefix.Substring(separatorIndex + 1) : "";
 
-                    PeerDiscovered?.Invoke(peerName, senderIP, "Online", "ClientOnly", peerPublicKey);
-                }
+                string[] parts = nameAndIP.Split(':');
+                string peerName = parts.Length >= 1 ? parts[0] : "Unknown";
+                string peerIP = parts.Length >= 2 ? parts[1] : senderIP;
+
+                _lastseen[senderIP] = DateTime.Now;
+                PeerDiscovered?.Invoke(peerName, peerIP, "Online", "ClientOnly", peerPublicKey);
             }
             else if (message.StartsWith("P2P:STATUS:"))
             {
-                string[] parts = message.Split(':');
-                if (parts.Length >= 5)
-                {
-                    string peerName = parts[2];
-                    string peerIP = parts[3];
-                    string peerStatus = parts[4];
-                    _lastseen[senderIP] = DateTime.Now;
-                    string peerPublicKey = parts.Length >= 6 ? parts[5] : string.Empty;
+                string withoutPrefix = message.Substring("P2P:STATUS:".Length);
 
-                    PeerDiscovered?.Invoke(peerName, senderIP, "Online", peerStatus, peerPublicKey);
+                int separatorIndex = withoutPrefix.LastIndexOf('|');
+
+                string statusAndIP;
+                string peerPublicKey = "";
+
+                if (separatorIndex > 0)
+                {
+                    statusAndIP = withoutPrefix.Substring(0, separatorIndex);
+                    peerPublicKey = withoutPrefix.Substring(separatorIndex + 1);
                 }
+                else
+                {
+                    statusAndIP = withoutPrefix;
+                }
+
+                string[] parts = statusAndIP.Split(':');
+                string peerName = parts.Length >= 1 ? parts[0] : "Unknown";
+                string peerIP = parts.Length >= 2 ? parts[1] : senderIP;
+                string peerStatus = parts.Length >= 3 ? parts[2] : "ClientOnly";
+
+                _lastseen[senderIP] = DateTime.Now;
+                PeerDiscovered?.Invoke(peerName, senderIP, "Online", peerStatus, peerPublicKey);
             }
         }
 
@@ -207,16 +233,26 @@ namespace Diplom.Services
         {
             try
             {
-                var host = Dns.GetHostEntry(Dns.GetHostName());
-                foreach(var ip in host.AddressList)
+                using (Socket socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, 0))
                 {
-                    if (ip.AddressFamily == AddressFamily.InterNetwork)
+                    socket.Connect("8.8.8.8", 65530);
+                    var endPoint = socket.LocalEndPoint as IPEndPoint;
+                    if (endPoint != null)
                     {
-                        return ip.ToString();
+                        string ipStr = endPoint.Address.ToString();
+                        if (!ipStr.StartsWith("192.168.56.") &&
+                            !ipStr.StartsWith("172.") &&
+                            !ipStr.StartsWith("169.254."))
+                        {
+                            return ipStr;
+                        }
                     }
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"GetMyIP error: {ex.Message}");
+            }
             return "127.0.0.1";
         }
 

@@ -358,13 +358,13 @@ namespace Diplom.ViewModels
                     IsOnline = true,
                     LastSeen = DateTime.Now,
                     Status = PeerStatus.ClientOnly,
-                    PublicKey = _cryptoService.GetPublicKey()
                 };
 
                 Peers.Add(peer);
                 StatusMessage = $"Добавлен пользователь: {peer.DisplayName}";
             }
         }
+
 
         private void OnLogMessage(string message)
         {
