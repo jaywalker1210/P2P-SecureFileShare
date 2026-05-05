@@ -197,7 +197,7 @@ namespace Diplom.Services
                 using (var client = new UdpClient())
                 {
                     var endpoint = new IPEndPoint(IPAddress.Parse(peerIP), _discoveryPort);
-                    string message = $"P2P:RESPONSE:{myName}:{GetMyIP()}:{MyPublicKeyBase64}";
+                    string message = $"P2P:RESPONSE:{myName}:{GetMyIP()}|{MyPublicKeyBase64}";
                     byte[] data = Encoding.UTF8.GetBytes(message);
 
                     client.Send(data, data.Length, endpoint);
@@ -240,8 +240,8 @@ namespace Diplom.Services
                     if (endPoint != null)
                     {
                         string ipStr = endPoint.Address.ToString();
-                        if (!ipStr.StartsWith("192.168.56.") &&
-                            !ipStr.StartsWith("172.") &&
+                        if (!ipStr.StartsWith("192.168.56.1") ||
+                            !ipStr.StartsWith("172.") ||
                             !ipStr.StartsWith("169.254."))
                         {
                             return ipStr;
