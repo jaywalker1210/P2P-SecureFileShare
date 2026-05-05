@@ -94,13 +94,11 @@ namespace Diplom.ViewModels
 
 
 
-            // Инициализируем крипто-ключи
             Task.Run(async () =>
             {
                 await _cryptoService.InitializeKeysAsync();
-
-                // Передаем публичный ключ в DiscoveryService
                 _discoveryService.MyPublicKeyBase64 = _cryptoService.GetPublicKeyBase64();
+                _discoveryService.StartDiscovery(MyName);
 
                 System.Windows.Application.Current.Dispatcher.Invoke(() =>
                 {
@@ -197,8 +195,6 @@ namespace Diplom.ViewModels
 
         private void UpdateMyStatus()
         {
-            // Здесь можно отправить дополнительную информацию о своем статусе
-            // Но пока просто перезапустим обнаружение
             _discoveryService.StartDiscovery(MyName);
         }
 
