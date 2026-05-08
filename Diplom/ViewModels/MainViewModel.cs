@@ -110,6 +110,9 @@ namespace Diplom.ViewModels
             _networkService.FileReceived += OnFileReceived;
             _networkService.FileReceiveStarted += OnFileReceiveStarted;
             _networkService.FileReceiveProgress += OnFileReceiveProgress;
+            _secureTransfer.OnSecureFileReceiveStarted += OnSecureFileReceiveStarted;
+            _secureTransfer.OnSecureFileCompleted += OnSecureFileCompleted;
+            _secureTransfer.OnSecureFileFailed += OnSecureFileFailed;
             _networkService.ServerStarted += () => IsServerRunning = true;
             _networkService.ServerStopped += () => IsServerRunning = false;
 
@@ -502,6 +505,87 @@ namespace Diplom.ViewModels
             }
             catch { }
             return "127.0.0.1";
+        }
+
+        private void OnSecureFileReceiveStarted(string fileName, string senderIP, long fileSize)
+        {
+            System.Windows.Application.Current.Dispatcher.Invoke(() =>
+            {
+                // Проверяем, нет ли уже такой записи (чтобы не дублировать)
+                var existing = Transfers.FirstOrDefault(t =>
+                    t.FileName == fileName && t.Sender == senderIP && t.Status == FileTransfer.TransferStatus.InProgress);
+
+                if (existing == null)
+                {
+                    var transfer = new FileTransfer
+                    {
+                        FileName = fileName,
+                        FileSize = fileSize,
+                        Sender = senderIP,
+                        Receiver = MyName,
+                        Timestamp = DateTime.Now,
+                        Status = FileTransfer.TransferStatus.InProgress,
+                        Progress = 0
+                    };
+                    Transfers.Add(transfer);
+                }
+
+                StatusMessage = $"Получение файла: {fileName} от {senderIP} (защищённо)";
+            });
+        }
+
+        // Обработчик завершения - ОБНОВЛЯЕМ существующую запись
+        private void OnSecureFileCompleted(string filePath, string senderIP, string fileName)
+        {
+            System.Windows.Application.Current.Dispatcher.Invoke(() =>
+            {
+                // Ищем существующую запись со статусом InProgress
+                var transfer = Transfers.FirstOrDefault(t =>
+                    t.FileName == fileName && t.Sender == senderIP && t.Status == FileTransfer.TransferStatus.InProgress);
+
+                if (transfer != null)
+                {
+                    // Обновляем существующую запись
+                    transfer.Status = FileTransfer.TransferStatus.Completed;
+                    transfer.Progress = 100;
+                    transfer.FileSize = new System.IO.FileInfo(filePath).Length;
+                }
+                else
+                {
+                    // Если не нашли (страховка) - создаём новую
+                    var newTransfer = new FileTransfer
+                    {
+                        FileName = fileName,
+                        FileSize = new System.IO.FileInfo(filePath).Length,
+                        Sender = senderIP,
+                        Receiver = MyName,
+                        Timestamp = DateTime.Now,
+                        Status = FileTransfer.TransferStatus.Completed,
+                        Progress = 100
+                    };
+                    Transfers.Add(newTransfer);
+                }
+
+                OnPropertyChanged(nameof(Transfers));
+                StatusMessage = $"Файл получен: {fileName} от {senderIP}";
+            });
+        }
+
+        // Обработчик ошибки
+        private void OnSecureFileFailed(string fileName, string senderIP, string errorMessage)
+        {
+            System.Windows.Application.Current.Dispatcher.Invoke(() =>
+            {
+                var transfer = Transfers.FirstOrDefault(t =>
+                    t.FileName == fileName && t.Sender == senderIP && t.Status == FileTransfer.TransferStatus.InProgress);
+
+                if (transfer != null)
+                {
+                    transfer.Status = FileTransfer.TransferStatus.Failed;
+                }
+
+                StatusMessage = $"Ошибка получения файла {fileName}: {errorMessage}";
+            });
         }
 
         public event PropertyChangedEventHandler PropertyChanged;

@@ -137,36 +137,55 @@ namespace Diplom.Services
         /// <summary>
         /// Обработка полученного защищённого файла
         /// </summary>
+        /// <summary>
+        /// Обработка полученного защищённого файла
+        /// </summary>
         private void OnSecureFileReceived(string senderIP, string fileName, byte[] encryptedFile, byte[] expectedHash, byte[] signature)
         {
-            try
+            Task.Run(async () =>
             {
-                // Запускаем обработку в фоне, чтобы не блокировать сетевой поток
-                Task.Run(async () =>
+                try
                 {
-                    // Получаем сессионный ключ для отправителя
+                    // 1. СРАЗУ уведомляем о начале получения (ещё до расшифровки)
+                    System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        var transfer = new FileTransfer
+                        {
+                            FileName = fileName,
+                            FileSize = encryptedFile.Length,
+                            Sender = senderIP,
+                            Receiver = Environment.UserName,
+                            Timestamp = DateTime.Now,
+                            Status = FileTransfer.TransferStatus.InProgress,
+                            Progress = 0
+                        };
+
+                        // Вызываем событие для добавления в UI
+                        OnSecureFileReceiveStarted?.Invoke(fileName, senderIP, encryptedFile.Length);
+                    });
+
                     if (!_sessionKeys.TryGetValue(senderIP, out byte[] aesKey))
                     {
                         throw new Exception("Нет установленного защищённого соединения с отправителем");
                     }
 
-                    // 1. Расшифровываем файл
+                    // 2. Расшифровываем файл
                     byte[] decryptedFile = DecryptWithAes(encryptedFile, aesKey);
 
-                    // 2. Считаем хеш полученного файла
+                    // 3. Считаем хеш полученного файла
                     byte[] actualHash;
                     using (SHA256 sha256 = SHA256.Create())
                     {
                         actualHash = sha256.ComputeHash(decryptedFile);
                     }
 
-                    // 3. Сравниваем хеши
+                    // 4. Сравниваем хеши
                     if (!CompareHashes(actualHash, expectedHash))
                     {
                         throw new Exception("Хеш файла не совпадает! Файл повреждён или подменён.");
                     }
 
-                    // 4. Сохраняем файл
+                    // 5. Сохраняем файл
                     string downloadsPath = Path.Combine(
                         Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
                         "P2PDownloads");
@@ -175,14 +194,29 @@ namespace Diplom.Services
                     string filePath = Path.Combine(downloadsPath, fileName);
                     await File.WriteAllBytesAsync(filePath, decryptedFile);
 
+                    // 6. Уведомляем о завершении (обновляем существующую запись)
+                    System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        OnSecureFileCompleted?.Invoke(filePath, senderIP, fileName);
+                    });
+
                     Console.WriteLine($"Secure file received: {fileName}");
-                });
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Secure file receive error: {ex.Message}");
-            }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Secure file receive error: {ex.Message}");
+                    System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        OnSecureFileFailed?.Invoke(fileName, senderIP, ex.Message);
+                    });
+                }
+            });
         }
+
+        // Добавь эти события в класс SecureTransferService
+        public event Action<string, string, long> OnSecureFileReceiveStarted;
+        public event Action<string, string, string> OnSecureFileCompleted;
+        public event Action<string, string, string> OnSecureFileFailed;
 
         private byte[] GenerateAesKey()
         {
