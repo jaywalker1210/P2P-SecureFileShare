@@ -113,6 +113,7 @@ namespace Diplom.ViewModels
             _secureTransfer.OnSecureFileReceiveStarted += OnSecureFileReceiveStarted;
             _secureTransfer.OnSecureFileCompleted += OnSecureFileCompleted;
             _secureTransfer.OnSecureFileFailed += OnSecureFileFailed;
+            _secureTransfer.OnSecureFileReceiveProgress += OnSecureFileReceiveProgress;
             _networkService.ServerStarted += () => IsServerRunning = true;
             _networkService.ServerStopped += () => IsServerRunning = false;
 
@@ -587,6 +588,21 @@ namespace Diplom.ViewModels
                 }
 
                 StatusMessage = $"Ошибка получения файла {fileName}: {errorMessage}";
+            });
+        }
+
+        private void OnSecureFileReceiveProgress(string fileName, double progress)
+        {
+            System.Windows.Application.Current.Dispatcher.Invoke(() =>
+            {
+                var transfer = Transfers.FirstOrDefault(t =>
+                    t.FileName == fileName && t.Status == FileTransfer.TransferStatus.InProgress);
+
+                if (transfer != null)
+                {
+                    transfer.Progress = progress;
+                    OnPropertyChanged(nameof(Transfers));
+                }
             });
         }
 

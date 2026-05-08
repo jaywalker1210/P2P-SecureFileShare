@@ -14,6 +14,8 @@ namespace Diplom.Services
         private readonly CryptoService _crypto;
         private readonly NetworkService _network;
 
+        public event Action<string, double> OnSecureFileReceiveProgress;
+
         // Хранилище сессионных ключей для получателей (IP -> AES ключ)
         private Dictionary<string, byte[]> _sessionKeys = new Dictionary<string, byte[]>();
 
@@ -142,51 +144,45 @@ namespace Diplom.Services
         /// </summary>
         private void OnSecureFileReceived(string senderIP, string fileName, byte[] encryptedFile, byte[] expectedHash, byte[] signature)
         {
+            // 1. СРАЗУ уведомляем UI о начале получения
+            System.Windows.Application.Current.Dispatcher.Invoke(() =>
+            {
+                OnSecureFileReceiveStarted?.Invoke(fileName, senderIP, encryptedFile.Length);
+            });
+
+            // 2. Запускаем расшифровку в фоне
             Task.Run(async () =>
             {
                 try
                 {
-                    // 1. СРАЗУ уведомляем о начале получения (ещё до расшифровки)
-                    System.Windows.Application.Current.Dispatcher.Invoke(() =>
-                    {
-                        var transfer = new FileTransfer
-                        {
-                            FileName = fileName,
-                            FileSize = encryptedFile.Length,
-                            Sender = senderIP,
-                            Receiver = Environment.UserName,
-                            Timestamp = DateTime.Now,
-                            Status = FileTransfer.TransferStatus.InProgress,
-                            Progress = 0
-                        };
-                       
-                        System.Diagnostics.Debug.WriteLine($"=== ВЫЗОВ OnSecureFileReceiveStarted: {fileName} от {senderIP} ===");
-                        // Вызываем событие для добавления в UI
-                        OnSecureFileReceiveStarted?.Invoke(fileName, senderIP, encryptedFile.Length);
-                    });
-
                     if (!_sessionKeys.TryGetValue(senderIP, out byte[] aesKey))
                     {
                         throw new Exception("Нет установленного защищённого соединения с отправителем");
                     }
 
-                    // 2. Расшифровываем файл
-                    byte[] decryptedFile = DecryptWithAes(encryptedFile, aesKey);
+                    // Расшифровываем файл с уведомлениями о прогрессе
+                    byte[] decryptedFile = await DecryptWithAesProgressAsync(encryptedFile, aesKey, (progress) =>
+                    {
+                        System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                        {
+                            OnSecureFileReceiveProgress?.Invoke(fileName, progress);
+                        });
+                    });
 
-                    // 3. Считаем хеш полученного файла
+                    // Считаем хеш
                     byte[] actualHash;
                     using (SHA256 sha256 = SHA256.Create())
                     {
                         actualHash = sha256.ComputeHash(decryptedFile);
                     }
 
-                    // 4. Сравниваем хеши
+                    // Сравниваем хеши
                     if (!CompareHashes(actualHash, expectedHash))
                     {
                         throw new Exception("Хеш файла не совпадает! Файл повреждён или подменён.");
                     }
 
-                    // 5. Сохраняем файл
+                    // Сохраняем файл
                     string downloadsPath = Path.Combine(
                         Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
                         "P2PDownloads");
@@ -195,13 +191,12 @@ namespace Diplom.Services
                     string filePath = Path.Combine(downloadsPath, fileName);
                     await File.WriteAllBytesAsync(filePath, decryptedFile);
 
-                    // 6. Уведомляем о завершении (обновляем существующую запись)
+                    // Уведомляем о завершении
                     System.Windows.Application.Current.Dispatcher.Invoke(() =>
                     {
                         OnSecureFileCompleted?.Invoke(filePath, senderIP, fileName);
+                        OnSecureFileReceiveProgress?.Invoke(fileName, 100);
                     });
-
-                    Console.WriteLine($"Secure file received: {fileName}");
                 }
                 catch (Exception ex)
                 {
@@ -210,6 +205,50 @@ namespace Diplom.Services
                     {
                         OnSecureFileFailed?.Invoke(fileName, senderIP, ex.Message);
                     });
+                }
+            });
+        }
+
+        // Добавь новый метод для расшифровки с прогрессом
+        private async Task<byte[]> DecryptWithAesProgressAsync(byte[] encryptedData, byte[] key, Action<double> onProgress)
+        {
+            return await Task.Run(() =>
+            {
+                using (Aes aes = Aes.Create())
+                {
+                    aes.Key = key;
+                    aes.Mode = CipherMode.CBC;
+                    aes.Padding = PaddingMode.PKCS7;
+
+                    // Извлекаем IV (первые 16 байт)
+                    byte[] iv = new byte[16];
+                    Buffer.BlockCopy(encryptedData, 0, iv, 0, 16);
+                    aes.IV = iv;
+
+                    // Извлекаем зашифрованные данные
+                    byte[] ciphertext = new byte[encryptedData.Length - 16];
+                    Buffer.BlockCopy(encryptedData, 16, ciphertext, 0, ciphertext.Length);
+
+                    using (var ms = new MemoryStream(ciphertext))
+                    using (var cs = new CryptoStream(ms, aes.CreateDecryptor(), CryptoStreamMode.Read))
+                    using (var resultMs = new MemoryStream())
+                    {
+                        byte[] buffer = new byte[8192];
+                        int bytesRead;
+                        long totalRead = 0;
+
+                        while ((bytesRead = cs.Read(buffer, 0, buffer.Length)) > 0)
+                        {
+                            resultMs.Write(buffer, 0, bytesRead);
+                            totalRead += bytesRead;
+
+                            // Отправляем прогресс
+                            double progress = (double)totalRead / ciphertext.Length * 100;
+                            onProgress?.Invoke(progress);
+                        }
+
+                        return resultMs.ToArray();
+                    }
                 }
             });
         }
