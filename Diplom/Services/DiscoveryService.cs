@@ -92,6 +92,7 @@ namespace Diplom.Services
         {
             using (var listener = new UdpClient(_discoveryPort))
             {
+                var myIPs = GetAllMyIPs();
                 while (!token.IsCancellationRequested)
                 {
                     try
@@ -100,7 +101,7 @@ namespace Diplom.Services
                         string message = Encoding.UTF8.GetString(result.Buffer);
                         string senderIP = result.RemoteEndPoint.Address.ToString();
 
-                        if (senderIP == GetMyIP())
+                        if (myIPs.Contains(senderIP))
                             continue;
 
                         ProcessDiscoveryMessage(message, senderIP, myName);
@@ -115,6 +116,27 @@ namespace Diplom.Services
                     }
                 }
             }
+        }
+        private List<string> GetAllMyIPs()
+        {
+            var ips = new List<string>();
+            try
+            {
+                var host = Dns.GetHostEntry(Dns.GetHostName());
+                foreach (var ip in host.AddressList)
+                {
+                    if (ip.AddressFamily == AddressFamily.InterNetwork)
+                    {
+                        ips.Add(ip.ToString());
+                    }
+                }
+            }
+            catch { }
+
+            ips.Add("127.0.0.1");
+            ips.Add("192.168.56.1");
+
+            return ips;
         }
 
         private void ProcessDiscoveryMessage(string message, string senderIP, string myName)
