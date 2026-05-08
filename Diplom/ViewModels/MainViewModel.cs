@@ -509,6 +509,8 @@ namespace Diplom.ViewModels
 
         private void OnSecureFileReceiveStarted(string fileName, string senderIP, long fileSize)
         {
+            System.Diagnostics.Debug.WriteLine($"=== OnSecureFileReceiveStarted ВЫЗВАН: {fileName} от {senderIP} ===");
+
             System.Windows.Application.Current.Dispatcher.Invoke(() =>
             {
                 // Проверяем, нет ли уже такой записи (чтобы не дублировать)

@@ -100,10 +100,7 @@ namespace Diplom.Services
                         int sigLen = reader.ReadInt32();
                         byte[] signature = reader.ReadBytes(sigLen);
 
-                        FileReceiveStarted?.Invoke(fileName, encryptedFile.Length, "Неизвестно", clientIP);
                         SecureFileReceived?.Invoke(clientIP, fileName, encryptedFile, expectedHash, signature);
-
-                        FileReceiveProgress?.Invoke(fileName, 100);
                     }
                 }
                 catch (Exception ex)

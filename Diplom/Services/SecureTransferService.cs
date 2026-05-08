@@ -159,7 +159,8 @@ namespace Diplom.Services
                             Status = FileTransfer.TransferStatus.InProgress,
                             Progress = 0
                         };
-
+                       
+                        System.Diagnostics.Debug.WriteLine($"=== ВЫЗОВ OnSecureFileReceiveStarted: {fileName} от {senderIP} ===");
                         // Вызываем событие для добавления в UI
                         OnSecureFileReceiveStarted?.Invoke(fileName, senderIP, encryptedFile.Length);
                     });
