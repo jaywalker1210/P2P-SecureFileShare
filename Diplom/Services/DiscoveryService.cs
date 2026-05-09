@@ -14,15 +14,15 @@ namespace Diplom.Services
         private UdpClient _udpClient;
         private UdpClient _udpListener;
         private CancellationTokenSource _cts;
-        private readonly int _discoveryPort = 8889; // порт для обнаружения через UDP
-        private readonly int _broadcastInterval = 5000; // 5 секунд (5000) 
-        private readonly int _peerTimeout = 15000; // 15 секунд без ответа = офлайн (15000)
+        private readonly int _discoveryPort = 8889;
+        private readonly int _broadcastInterval = 5000;
+        private readonly int _peerTimeout = 15000;
 
-        public event Action<string, string, string, string, string> PeerDiscovered; // событие для уведомления об обнаружении нового пира (имя, IP, статус)
+        public event Action<string, string, string, string, string> PeerDiscovered;
 
         private Dictionary<string, DateTime> _lastseen = new Dictionary<string, DateTime>();
 
-        private Timer _cleanupTimer; // таймер для проверки онлайн статуса
+        private Timer _cleanupTimer;
 
         public string MyPublicKeyBase64 { get; set; } = string.Empty;
 

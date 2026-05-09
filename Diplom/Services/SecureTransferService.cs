@@ -13,10 +13,11 @@ namespace Diplom.Services
     {
         private readonly CryptoService _crypto;
         private readonly NetworkService _network;
-
+        public event Action<string, string, long> OnSecureFileReceiveStarted;
+        public event Action<string, string, string> OnSecureFileCompleted;
+        public event Action<string, string, string> OnSecureFileFailed;
         public event Action<string, double> OnSecureFileReceiveProgress;
 
-        // Хранилище сессионных ключей для получателей (IP -> AES ключ)
         private Dictionary<string, byte[]> _sessionKeys = new Dictionary<string, byte[]>();
 
         public SecureTransferService(CryptoService crypto, NetworkService network)
@@ -209,7 +210,6 @@ namespace Diplom.Services
             });
         }
 
-        // Добавь новый метод для расшифровки с прогрессом
         private async Task<byte[]> DecryptWithAesProgressAsync(byte[] encryptedData, byte[] key, Action<double> onProgress)
         {
             return await Task.Run(() =>
@@ -220,12 +220,10 @@ namespace Diplom.Services
                     aes.Mode = CipherMode.CBC;
                     aes.Padding = PaddingMode.PKCS7;
 
-                    // Извлекаем IV (первые 16 байт)
                     byte[] iv = new byte[16];
                     Buffer.BlockCopy(encryptedData, 0, iv, 0, 16);
                     aes.IV = iv;
 
-                    // Извлекаем зашифрованные данные
                     byte[] ciphertext = new byte[encryptedData.Length - 16];
                     Buffer.BlockCopy(encryptedData, 16, ciphertext, 0, ciphertext.Length);
 
@@ -242,7 +240,6 @@ namespace Diplom.Services
                             resultMs.Write(buffer, 0, bytesRead);
                             totalRead += bytesRead;
 
-                            // Отправляем прогресс
                             double progress = (double)totalRead / ciphertext.Length * 100;
                             onProgress?.Invoke(progress);
                         }
@@ -253,10 +250,7 @@ namespace Diplom.Services
             });
         }
 
-        // Добавь эти события в класс SecureTransferService
-        public event Action<string, string, long> OnSecureFileReceiveStarted;
-        public event Action<string, string, string> OnSecureFileCompleted;
-        public event Action<string, string, string> OnSecureFileFailed;
+        
 
         private byte[] GenerateAesKey()
         {
@@ -276,7 +270,6 @@ namespace Diplom.Services
                 aes.Mode = CipherMode.CBC;
                 aes.Padding = PaddingMode.PKCS7;
 
-                // Генерируем случайный IV (16 байт для CBC)
                 byte[] iv = new byte[16];
                 using (RandomNumberGenerator rng = RandomNumberGenerator.Create())
                 {
@@ -284,14 +277,11 @@ namespace Diplom.Services
                 }
                 aes.IV = iv;
 
-                // Шифруем данные
                 using (var encryptor = aes.CreateEncryptor())
                 using (var ms = new MemoryStream())
                 {
-                    // Сначала пишем IV
                     ms.Write(iv, 0, iv.Length);
-
-                    // Шифруем и пишем данные
+        
                     using (var cs = new CryptoStream(ms, encryptor, CryptoStreamMode.Write))
                     {
                         cs.Write(data, 0, data.Length);
@@ -299,35 +289,6 @@ namespace Diplom.Services
                     }
 
                     return ms.ToArray();
-                }
-            }
-        }
-
-        private byte[] DecryptWithAes(byte[] encryptedData, byte[] key)
-        {
-            using (Aes aes = Aes.Create())
-            {
-                aes.Key = key;
-                aes.Mode = CipherMode.CBC;
-                aes.Padding = PaddingMode.PKCS7;
-
-                // Извлекаем IV (первые 16 байт)
-                byte[] iv = new byte[16];
-                Buffer.BlockCopy(encryptedData, 0, iv, 0, 16);
-                aes.IV = iv;
-
-                // Извлекаем зашифрованные данные (остальное)
-                byte[] ciphertext = new byte[encryptedData.Length - 16];
-                Buffer.BlockCopy(encryptedData, 16, ciphertext, 0, ciphertext.Length);
-
-                // Расшифровываем
-                using (var decryptor = aes.CreateDecryptor())
-                using (var ms = new MemoryStream(ciphertext))
-                using (var cs = new CryptoStream(ms, decryptor, CryptoStreamMode.Read))
-                using (var resultMs = new MemoryStream())
-                {
-                    cs.CopyTo(resultMs);
-                    return resultMs.ToArray();
                 }
             }
         }

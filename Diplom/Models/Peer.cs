@@ -66,7 +66,7 @@ namespace Diplom.Models
     public enum PeerStatus
     {
         Unknown,
-        ServerReady, // Запустил сервер
-        ClientOnly // Тоько клиент, не готов принимать
+        ServerReady,
+        ClientOnly
     }
 }

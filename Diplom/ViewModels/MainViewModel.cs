@@ -82,7 +82,6 @@ namespace Diplom.ViewModels
 
         public MainViewModel()
         {
-            // Инициализация коллекции в конструкторе
             Peers = new ObservableCollection<Peer>();
             Transfers = new ObservableCollection<FileTransfer>();
 
@@ -255,7 +254,6 @@ namespace Diplom.ViewModels
                 return;
             }
 
-            // Проверяем, есть ли защищённое соединение
             if (!_secureTransfer.HasSecureConnection(SelectedPeerIP))
             {
                 StatusMessage = "Сначала установите защищённое соединение (кнопка '🔒 Соединение')";
@@ -335,14 +333,12 @@ namespace Diplom.ViewModels
              StatusMessage = "Поиск пользователей...";
         }
 
-        // Метод для ручного добавления
         private void AddPeerManually()
         {
             var dialog = new Microsoft.Win32.SaveFileDialog();
             dialog.Title = "Введите IP адрес получателя";
-            dialog.FileName = ""; // Не сохраняем файл
+            dialog.FileName = "";
 
-            // Простой ввод через диалог
             string ip = Microsoft.VisualBasic.Interaction.InputBox(
                 "Введите IP адрес компьютера получателя:",
                 "Ручное добавление пира",
@@ -350,7 +346,6 @@ namespace Diplom.ViewModels
 
             if (!string.IsNullOrEmpty(ip))
             {
-                // Добавляем пира вручную
                 var peer = new Peer
                 {
                     Name = $"Пользователь {ip}",
@@ -368,7 +363,6 @@ namespace Diplom.ViewModels
 
         private void OnLogMessage(string message)
         {
-            // Обновляем статус в UI потоке
             System.Windows.Application.Current.Dispatcher.Invoke(() =>
             {
                 StatusMessage = message;
@@ -440,7 +434,6 @@ namespace Diplom.ViewModels
         {
             var fileName = System.IO.Path.GetFileName(filePath);
 
-            // Добавляем историю в UI потоке
             System.Windows.Application.Current.Dispatcher.Invoke(() =>
             {
                 var existingTransfer = Transfers.FirstOrDefault(t =>
@@ -514,7 +507,6 @@ namespace Diplom.ViewModels
 
             System.Windows.Application.Current.Dispatcher.Invoke(() =>
             {
-                // Проверяем, нет ли уже такой записи (чтобы не дублировать)
                 var existing = Transfers.FirstOrDefault(t =>
                     t.FileName == fileName && t.Sender == senderIP && t.Status == FileTransfer.TransferStatus.InProgress);
 
@@ -537,25 +529,21 @@ namespace Diplom.ViewModels
             });
         }
 
-        // Обработчик завершения - ОБНОВЛЯЕМ существующую запись
         private void OnSecureFileCompleted(string filePath, string senderIP, string fileName)
         {
             System.Windows.Application.Current.Dispatcher.Invoke(() =>
             {
-                // Ищем существующую запись со статусом InProgress
                 var transfer = Transfers.FirstOrDefault(t =>
                     t.FileName == fileName && t.Sender == senderIP && t.Status == FileTransfer.TransferStatus.InProgress);
 
                 if (transfer != null)
                 {
-                    // Обновляем существующую запись
                     transfer.Status = FileTransfer.TransferStatus.Completed;
                     transfer.Progress = 100;
                     transfer.FileSize = new System.IO.FileInfo(filePath).Length;
                 }
                 else
                 {
-                    // Если не нашли (страховка) - создаём новую
                     var newTransfer = new FileTransfer
                     {
                         FileName = fileName,
@@ -574,7 +562,6 @@ namespace Diplom.ViewModels
             });
         }
 
-        // Обработчик ошибки
         private void OnSecureFileFailed(string fileName, string senderIP, string errorMessage)
         {
             System.Windows.Application.Current.Dispatcher.Invoke(() =>

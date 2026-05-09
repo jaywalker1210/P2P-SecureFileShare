@@ -17,7 +17,6 @@ namespace Diplom.Services
 
         public CryptoService()
         {
-            // Папка для хранения ключей в AppData
             _keysFolder = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "P2PFileShare",
@@ -36,12 +35,10 @@ namespace Diplom.Services
 
             if (File.Exists(privateKeyPath) && File.Exists(publicKeyPath))
             {
-                // Загружаем существующие ключи
                 await LoadKeysAsync(privateKeyPath, publicKeyPath);
             }
             else
             {
-                // генерируем новую пару ключей
                 await GenerateAndSaveKeysAsync(privateKeyPath, publicKeyPath);
             }
         }
@@ -55,15 +52,12 @@ namespace Diplom.Services
             {
                 using (RSA rsa = RSA.Create(2048))
                 {
-                    // Сохраняем приватный ключ (только для владельца)
                     byte[] privateKeyBytes = rsa.ExportRSAPrivateKey();
                     File.WriteAllBytes(privateKeyPath, privateKeyBytes);
 
-                    // Сохраняем публичный ключ (можно передавать другим)
                     byte[] publicKeyBytes = rsa.ExportRSAPublicKey();
                     File.WriteAllBytes(publicKeyPath, publicKeyBytes);
 
-                    // Загружаем ключи в память
                     _publicKey = rsa.ExportParameters(false);
                     _privateKey = rsa.ExportParameters(true);
                     _keysLoaded = true;
@@ -133,7 +127,6 @@ namespace Diplom.Services
             using (SHA256 sha256 = SHA256.Create())
             {
                 byte[] hash = sha256.ComputeHash(Encoding.UTF8.GetBytes(publicKeyBase64));
-                // Берём первые 8 байт и форматируем как HEX
                 return BitConverter.ToString(hash, 0, 8).Replace("-", "").ToUpper();
             }
         }
@@ -185,13 +178,5 @@ namespace Diplom.Services
                 return rsa.VerifyData(data, signature, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
             }
         }
-
-        /// <summary>
-        /// Проверяем, загружены ли ключи (для UI)
-        /// </summary>
-        public bool IsKeysLoaded() => _keysLoaded;
-
-        // Для тестирования
-        public RSAParameters GetPublicKey() => _publicKey;
     }
 }

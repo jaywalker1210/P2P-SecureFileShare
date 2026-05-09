@@ -23,9 +23,9 @@ namespace Diplom.Services
         public event Action<string, double> FileReceiveProgress;
 
         // Новые события для Handshake и защищённой передачи
-        public event Action<string, byte[], byte[]> HandshakeRequestReceived; // senderIP, encryptedAesKey, signature
-        public event Action<string, byte[]> HandshakeResponseReceived; // senderIP, signature
-        public event Action<string, string, byte[], byte[], byte[]> SecureFileReceived; // senderIP, fileName, encryptedFile, expectedHash, signature
+        public event Action<string, byte[], byte[]> HandshakeRequestReceived;
+        public event Action<string, byte[]> HandshakeResponseReceived;
+        public event Action<string, string, byte[], byte[], byte[]> SecureFileReceived;
 
         public async Task StartServerAsync()
         {
@@ -114,14 +114,12 @@ namespace Diplom.Services
         {
             try
             {
-                // Читаем метаданные
                 string fileName = reader.ReadString();
                 long fileSize = reader.ReadInt64();
                 string senderName = reader.ReadString();
 
                 LogMessage?.Invoke($"Получение файла '{fileName}' ({fileSize} байт) от {senderName} ({clientIP}).");
 
-                // Создаем папку для загрузок
                 string downloadsPath = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
                     "P2PDownloads");
@@ -131,7 +129,6 @@ namespace Diplom.Services
 
                 FileReceiveStarted?.Invoke(fileName, fileSize, senderName, clientIP);
 
-                // Читаем и сохраняем файл
                 using (FileStream fileStream = new FileStream(filePath, FileMode.Create))
                 {
                     byte[] buffer = new byte[8192];
@@ -147,7 +144,6 @@ namespace Diplom.Services
                         await fileStream.WriteAsync(buffer, 0, bytesRead);
                         bytesReceived += bytesRead;
 
-                        // Отправляем прогресс
                         double progress = (double)bytesReceived / fileSize * 100;
                         FileReceiveProgress?.Invoke(fileName, progress);
                     }
@@ -179,12 +175,10 @@ namespace Diplom.Services
                         // Отправляем тип сообщения (1 = файл)
                         writer.Write((byte)1);
 
-                        // Отправляем метаданные
                         writer.Write(Path.GetFileName(filePath));
                         writer.Write(fileStream.Length);
                         writer.Write(senderName);
 
-                        // Отправляем содержимое файла
                         byte[] buffer = new byte[8192];
                         int bytesRead;
                         long totalBytesSent = 0;
@@ -194,7 +188,6 @@ namespace Diplom.Services
                             writer.Write(buffer, 0, bytesRead);
                             totalBytesSent += bytesRead;
 
-                            // Отправляем прогресс
                             if (progress != null)
                             {
                                 double percent = (double)totalBytesSent / fileStream.Length * 100;
@@ -283,14 +276,30 @@ namespace Diplom.Services
                     using (NetworkStream stream = client.GetStream())
                     using (BinaryWriter writer = new BinaryWriter(stream))
                     {
-                        writer.Write((byte)4); // Тип сообщения: Защищённый файл
+                        writer.Write((byte)4);
                         writer.Write(fileName);
                         writer.Write(encryptedFile.Length);
-                        writer.Write(encryptedFile);
                         writer.Write(expectedHash.Length);
                         writer.Write(expectedHash);
                         writer.Write(signature.Length);
                         writer.Write(signature);
+
+                        int chunkSize = 64 * 1024;
+                        int totalSent = 0;
+                        int totalLength = encryptedFile.Length;
+
+                        while (totalSent < totalLength)
+                        {
+                            int bytesToSend = Math.Min(chunkSize, totalLength - totalSent);
+                            writer.Write(encryptedFile, totalSent, bytesToSend);
+                            totalSent += bytesToSend;
+
+                            if (progress != null)
+                            {
+                                double percent = (double)totalSent / totalLength * 100;
+                                progress.Report(percent);
+                            }
+                        }
                     }
                 }
             }
