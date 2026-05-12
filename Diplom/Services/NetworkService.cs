@@ -1,5 +1,7 @@
 ﻿using System.IO;
 using System.Net.Sockets;
+using System.Reflection.Metadata;
+using System.Text;
 
 namespace Diplom.Services
 {
@@ -18,7 +20,7 @@ namespace Diplom.Services
         public event Action<string, long, string,string> FileReceiveStarted;
         public event Action<string, double> FileReceiveProgress;
 
-        public event Action<string, byte[], byte[]> HandshakeRequestReceived;
+        public event Action<string, byte[], byte[], string> HandshakeRequestReceived;
         public event Action<string, byte[]> HandshakeResponseReceived;
         public event Action<string, string, byte[], byte[], byte[]> SecureFileReceived;
 
@@ -77,7 +79,11 @@ namespace Diplom.Services
                         byte[] encryptedAesKey = reader.ReadBytes(keyLen);
                         int sigLen = reader.ReadInt32();
                         byte[] signature = reader.ReadBytes(sigLen);
-                        HandshakeRequestReceived?.Invoke(clientIP, encryptedAesKey, signature);
+                        int pubKeyLen = reader.ReadInt32();
+                        byte[] publicKeyBytes = reader.ReadBytes(pubKeyLen);
+                        string publicKeyBase64 = Encoding.UTF8.GetString(publicKeyBytes);
+
+                        HandshakeRequestReceived?.Invoke(clientIP, encryptedAesKey, signature, publicKeyBase64);
                     }
                     else if (messageType == 3) // Handshake ответ
                     {
@@ -206,7 +212,7 @@ namespace Diplom.Services
         /// <summary>
         /// Отправка Handshake запроса
         /// </summary>
-        public async Task SendHandshakeRequestAsync(string receiverIP, byte[] encryptedAesKey, byte[] signature)
+        public async Task SendHandshakeRequestAsync(string receiverIP, byte[] encryptedAesKey, byte[] signature, string myPublicKeyBase64)
         {
             try
             {
@@ -222,6 +228,10 @@ namespace Diplom.Services
                         writer.Write(encryptedAesKey);
                         writer.Write(signature.Length);
                         writer.Write(signature);
+
+                        byte[] publicKeyBytes = Encoding.UTF8.GetBytes(myPublicKeyBase64);
+                        writer.Write(publicKeyBytes.Length);
+                        writer.Write(publicKeyBytes);
                     }
                 }
             }

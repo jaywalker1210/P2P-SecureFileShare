@@ -13,6 +13,7 @@ namespace Diplom.Services
         public event Action<string, double> OnSecureFileReceiveProgress;
 
         private Dictionary<string, byte[]> _sessionKeys = new Dictionary<string, byte[]>();
+        private Dictionary<string, RSAParameters> _peerPublicKeys = new Dictionary<string, RSAParameters>();
 
         public SecureTransferService(CryptoService crypto, NetworkService network)
         {
@@ -27,7 +28,7 @@ namespace Diplom.Services
         /// <summary>
         /// Инициировать Handshake с получателем
         /// </summary>
-        public async Task<bool> InitiateHandshakeAsync(string receiverIP, RSAParameters receiverPublicKey)
+        public async Task<bool> InitiateHandshakeAsync(string receiverIP, RSAParameters receiverPublicKey, string myPublicKeyBase64)
         {
             try
             {
@@ -41,7 +42,7 @@ namespace Diplom.Services
                 byte[] signature = _crypto.SignData(encryptedAesKey);
 
                 // 4. Отправляем Handshake запрос
-                await _network.SendHandshakeRequestAsync(receiverIP, encryptedAesKey, signature);
+                await _network.SendHandshakeRequestAsync(receiverIP, encryptedAesKey, signature, myPublicKeyBase64);
 
                 // 5. Сохраняем ключ для этого получателя
                 _sessionKeys[receiverIP] = aesKey;
@@ -58,15 +59,24 @@ namespace Diplom.Services
         /// <summary>
         /// Обработка Handshake запроса (на стороне получателя)
         /// </summary>
-        private void OnHandshakeRequestReceived(string senderIP, byte[] encryptedAesKey, byte[] signature)
+        private void OnHandshakeRequestReceived(string senderIP, byte[] encryptedAesKey, byte[] signature, string senderPublicKeyBase64)
         {
             try
             {
+                var senderPublicKey = _crypto.ImportPublicKeyFromBase64(senderPublicKeyBase64);
+
+                bool isValid = _crypto.VerifySignature(encryptedAesKey, signature, senderPublicKey);
+                if (!isValid)
+                {
+                    throw new CryptographicException("Недействительная подпись отправителя!");
+                }
+
                 // Расшифровываем AES ключ своим приватным ключом
                 byte[] aesKey = _crypto.DecryptWithPrivateKey(encryptedAesKey);
 
                 // Сохраняем ключ для этого отправителя
                 _sessionKeys[senderIP] = aesKey;
+                _peerPublicKeys[senderIP] = senderPublicKey;
 
                 // Отправляем подтверждение (запускаем в фоне, не ждём)
                 Task.Run(async () =>
@@ -75,11 +85,11 @@ namespace Diplom.Services
                     await _network.SendHandshakeResponseAsync(senderIP, confirmationSignature);
                 });
 
-                Console.WriteLine($"Handshake completed with {senderIP}");
+                Console.WriteLine($"Рукопожатие успешно выполнено с {senderIP}");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Handshake receive error: {ex.Message}");
+                Console.WriteLine($"Ошибка установления рукопожатия: {ex.Message}");
             }
         }
 
@@ -134,9 +144,6 @@ namespace Diplom.Services
         /// <summary>
         /// Обработка полученного защищённого файла
         /// </summary>
-        /// <summary>
-        /// Обработка полученного защищённого файла
-        /// </summary>
         private void OnSecureFileReceived(string senderIP, string fileName, byte[] encryptedFile, byte[] expectedHash, byte[] signature)
         {
             // 1. СРАЗУ уведомляем UI о начале получения
@@ -152,7 +159,7 @@ namespace Diplom.Services
                 {
                     if (!_sessionKeys.TryGetValue(senderIP, out byte[] aesKey))
                     {
-                        throw new Exception("Нет установленного защищённого соединения с отправителем");
+                        throw new CryptographicException("Нет установленного защищённого соединения с отправителем");
                     }
 
                     // Расшифровываем файл с уведомлениями о прогрессе
@@ -174,7 +181,18 @@ namespace Diplom.Services
                     // Сравниваем хеши
                     if (!CompareHashes(actualHash, expectedHash))
                     {
-                        throw new Exception("Хеш файла не совпадает! Файл повреждён или подменён.");
+                        throw new CryptographicException("Хеш файла не совпадает! Файл повреждён или подменён.");
+                    }
+
+                    if (!_peerPublicKeys.TryGetValue(senderIP, out var senderPublicKey))
+                    {
+                        throw new CryptographicException("Нет публичного ключа отправителя для проверки подписи!");
+                    }
+
+                    bool isSignatureValid = _crypto.VerifySignature(actualHash, signature, senderPublicKey);
+                    if (!isSignatureValid)
+                    {
+                        throw new CryptographicException("Недействительная подпись файла! Файл может быть подменён.");
                     }
 
                     // Сохраняем файл

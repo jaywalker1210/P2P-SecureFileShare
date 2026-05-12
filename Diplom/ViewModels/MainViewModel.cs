@@ -382,7 +382,10 @@ namespace Diplom.ViewModels
 
             StatusMessage = $"Установка защищённого соединения с {peer.DisplayName}...";
 
-            bool success = await _secureTransfer.InitiateHandshakeAsync(SelectedPeerIP, peer.PublicKey.Value);
+            bool success = await _secureTransfer.InitiateHandshakeAsync(
+                SelectedPeerIP, 
+                peer.PublicKey.Value,
+                _cryptoService.GetPublicKeyBase64());
 
             if (success)
             {
