@@ -1,9 +1,5 @@
-﻿using System;
-using System.IO;
-using System.Net;
+﻿using System.IO;
 using System.Net.Sockets;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace Diplom.Services
 {
@@ -22,7 +18,6 @@ namespace Diplom.Services
         public event Action<string, long, string,string> FileReceiveStarted;
         public event Action<string, double> FileReceiveProgress;
 
-        // Новые события для Handshake и защищённой передачи
         public event Action<string, byte[], byte[]> HandshakeRequestReceived;
         public event Action<string, byte[]> HandshakeResponseReceived;
         public event Action<string, string, byte[], byte[], byte[]> SecureFileReceived;

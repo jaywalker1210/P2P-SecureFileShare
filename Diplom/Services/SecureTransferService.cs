@@ -1,11 +1,5 @@
-﻿using Diplom.Models;
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
+﻿using System.IO;
 using System.Security.Cryptography;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Diplom.Services
 {
@@ -249,8 +243,6 @@ namespace Diplom.Services
                 }
             });
         }
-
-        
 
         private byte[] GenerateAesKey()
         {
