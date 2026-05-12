@@ -94,11 +94,13 @@ namespace Diplom.Services
                     {
                         string fileName = reader.ReadString();
                         int fileLen = reader.ReadInt32();
-                        byte[] encryptedFile = reader.ReadBytes(fileLen);
+
                         int hashLen = reader.ReadInt32();
                         byte[] expectedHash = reader.ReadBytes(hashLen);
                         int sigLen = reader.ReadInt32();
                         byte[] signature = reader.ReadBytes(sigLen);
+
+                        byte[] encryptedFile = reader.ReadBytes(fileLen);
 
                         SecureFileReceived?.Invoke(clientIP, fileName, encryptedFile, expectedHash, signature);
                     }
